@@ -363,8 +363,22 @@ img.pl-avatar-static {{
 }}
 
 img.pl-avatar-static-lg {{
-  width: 88px;
-  height: 88px;
+  width: 140px;
+  height: 140px;
+  margin: 0 auto;
+}}
+
+.pl-setup-avatar-wrap {{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 0.35rem 0 0.5rem 0;
+}}
+
+.pl-setup-avatar-wrap img.pl-avatar-static {{
+  width: 140px;
+  height: 140px;
 }}
 
 div.pl-avatar-dialog [data-testid="stImage"] img {{
@@ -459,22 +473,26 @@ def open_avatar_dialog() -> None:
         st.rerun()
 
 
-def _render_avatar_image(*, size: str = "sm") -> None:
+def _render_avatar_image(*, size: str = "sm", centered: bool = False) -> None:
     """Ảnh avatar tròn — chỉ hiển thị, không bấm."""
     cls = "pl-avatar-static pl-avatar-static-lg" if size == "lg" else "pl-avatar-static"
     if AVATAR_PATH.is_file():
         uri = _data_uri(AVATAR_PATH)
+        inner = f'<img class="{cls}" src="{uri}" alt="{APP_USER_FULL_NAME}" />'
+    else:
+        dim = "140px" if size == "lg" else "56px"
+        inner = (
+            f'<div class="{cls}" style="display:flex;align-items:center;'
+            f'justify-content:center;font-size:1.4rem;background:#ffe8f0;'
+            f'width:{dim};height:{dim};border-radius:50%">👤</div>'
+        )
+    if centered:
         st.markdown(
-            f'<img class="{cls}" src="{uri}" alt="{APP_USER_FULL_NAME}" />',
+            f'<div class="pl-setup-avatar-wrap">{inner}</div>',
             unsafe_allow_html=True,
         )
     else:
-        st.markdown(
-            f'<div class="{cls}" style="display:flex;align-items:center;'
-            f'justify-content:center;font-size:1.4rem;background:#ffe8f0;'
-            f'width:56px;height:56px;border-radius:50%">👤</div>',
-            unsafe_allow_html=True,
-        )
+        st.markdown(inner, unsafe_allow_html=True)
 
 
 @st.fragment
@@ -549,11 +567,10 @@ def render_app_header(*, app_name: str, version: str) -> None:
 
 
 def render_setup_user_card(app_user: dict) -> None:
-    """User block in Thiết lập tab with avatar + settings gear."""
-    c1, c2 = st.columns([1, 3], vertical_alignment="center")
+    """User block in Thiết lập — avatar lớn căn giữa, không nút cài đặt."""
+    c1, c2 = st.columns([1.1, 2.9], vertical_alignment="center")
     with c1:
-        _render_avatar_image(size="lg")
-        _render_settings_button(key="pl_open_avatar_setup")
+        _render_avatar_image(size="lg", centered=True)
     with c2:
         st.subheader("User")
         st.caption(

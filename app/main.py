@@ -12,6 +12,7 @@ import streamlit as st
 
 from app.config import APP_NAME, APP_VERSION
 from app.db import db_stats, init_db
+from app.services.location_sync import sync_locations
 from app.services.project_sync import mark_expired_projects, sync_projects
 from app.services.user_service import (
     ensure_app_user,
@@ -107,6 +108,50 @@ with tab_setup:
             f"HeadcountRequestID={updated.get('headcount_request_id')!r}"
         )
         st.rerun()
+
+    st.divider()
+    st.subheader("Sync địa chỉ (Province → District → Ward)")
+    st.caption(
+        "Kéo huyện/phường từ Location API vào SQLite — dùng cho dropdown địa chỉ. "
+        "Không cần portal cookie. Có thể mất vài phút."
+    )
+    loc_stats = db_stats()
+    l1, l2, l3 = st.columns(3)
+    l1.metric("Provinces", loc_stats["provinces"])
+    l2.metric("Districts", loc_stats["districts"])
+    l3.metric("Wards", loc_stats["wards"])
+
+    sync_loc = st.button(
+        "Sync Locations (Prov / Dist / Ward)",
+        type="primary",
+        use_container_width=True,
+        key="btn_sync_locations",
+    )
+    if sync_loc:
+        if int(loc_stats.get("provinces") or 0) <= 0:
+            st.error(
+                "Chưa có bảng provinces trong DB — cần seed province trước "
+                "(file provincedata / sync tỉnh)."
+            )
+        else:
+            log = st.empty()
+            try:
+                with st.spinner("Đang sync districts + wards..."):
+                    result = sync_locations(
+                        letter_codes_only=True,
+                        sync_wards=True,
+                        progress=lambda msg: log.write(msg),
+                    )
+                st.success(
+                    f"OK — provinces={result.province_count}, "
+                    f"districts={result.district_count}, "
+                    f"wards={result.ward_count}"
+                )
+                if result.errors:
+                    st.warning("\n".join(result.errors[:15]))
+                st.rerun()
+            except Exception as exc:  # noqa: BLE001
+                st.error(str(exc))
 
     st.divider()
     st.subheader("Sync Projects")

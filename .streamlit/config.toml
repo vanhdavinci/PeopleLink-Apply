@@ -1,0 +1,14 @@
+[client]
+# Ẩn Deploy / developer toolbar
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#e27aa5"
+backgroundColor = "#fff5f8"
+secondaryBackgroundColor = "#ffe8f0"
+textColor = "#5c3a4a"
+font = "sans serif"

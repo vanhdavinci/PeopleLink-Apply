@@ -1,0 +1,264 @@
+{
+  "info": {
+    "_postman_id": "40fed264-8646-4ae5-b7c0-8f4f8d08c49e",
+    "name": "New Collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "34527214"
+  },
+  "item": [
+    {
+      "name": "https://recruit.peoplelinkvietnam.com/ProjectHeadcount/Candidate_ApplyRequest_v2",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "accept",
+            "value": "*/*"
+          },
+          {
+            "key": "accept-language",
+            "value": "vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5"
+          },
+          {
+            "key": "origin",
+            "value": "https://recruit.peoplelinkvietnam.com"
+          },
+          {
+            "key": "priority",
+            "value": "u=1, i"
+          },
+          {
+            "key": "referer",
+            "value": "https://recruit.peoplelinkvietnam.com/ProjectHeadcount/ApplyRequest/2239"
+          },
+          {
+            "key": "sec-ch-ua",
+            "value": "\"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\""
+          },
+          {
+            "key": "sec-ch-ua-mobile",
+            "value": "?1"
+          },
+          {
+            "key": "sec-ch-ua-platform",
+            "value": "\"Android\""
+          },
+          {
+            "key": "sec-fetch-dest",
+            "value": "empty"
+          },
+          {
+            "key": "sec-fetch-mode",
+            "value": "cors"
+          },
+          {
+            "key": "sec-fetch-site",
+            "value": "same-origin"
+          },
+          {
+            "key": "user-agent",
+            "value": "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36"
+          },
+          {
+            "key": "x-requested-with",
+            "value": "XMLHttpRequest"
+          },
+          {
+            "key": "Cookie",
+            "value": "_ga=GA1.2.251982480.1781198130; _ga_4S7YSLMS66=GS2.2.s1782837523$o2$g1$t1782838783$j4$l0$h0; ASP.NET_SessionId=gv3hwbyfdu1hxxf4lsvdy5ur"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "HeadcountReqRecruiterID",
+              "value": "2239",
+              "type": "text"
+            },
+            {
+              "key": "RecruiterPIC",
+              "value": "28924",
+              "type": "text"
+            },
+            {
+              "key": "HeadcountRequestID",
+              "value": "1828",
+              "type": "text"
+            },
+            {
+              "key": "ProjectHeadcountID",
+              "value": "176",
+              "type": "text"
+            },
+            {
+              "key": "ProjectHeadcountType",
+              "value": "3",
+              "type": "text"
+            },
+            {
+              "key": "Register_Source",
+              "value": "Portal",
+              "type": "text"
+            },
+            {
+              "key": "PersonID",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "StoreShift[0][StoreID]",
+              "value": "null",
+              "type": "text"
+            },
+            {
+              "key": "StoreShift[0][ShiftID]",
+              "value": "null",
+              "type": "text"
+            },
+            {
+              "key": "Mobile",
+              "value": "0934 213 213",
+              "type": "text"
+            },
+            {
+              "key": "FullName",
+              "value": "Somebody",
+              "type": "text"
+            },
+            {
+              "key": "Sex",
+              "value": "1",
+              "type": "text"
+            },
+            {
+              "key": "Birthday",
+              "value": "07/08/2026",
+              "type": "text"
+            },
+            {
+              "key": "AcademicLevel",
+              "value": "Đại học",
+              "type": "text"
+            },
+            {
+              "key": "Email",
+              "value": "nhvietanh1910@gmail.com",
+              "type": "text"
+            },
+            {
+              "key": "AddrTmpStreet",
+              "value": "số 19 đường 12",
+              "type": "text"
+            },
+            {
+              "key": "AddrTmpProvince",
+              "value": "ANGIANG|Tỉnh An Giang",
+              "type": "text"
+            },
+            {
+              "key": "AddrTmpDistrict",
+              "value": "210|Thành phố Châu Đốc",
+              "type": "text"
+            },
+            {
+              "key": "AddrTmpWard",
+              "value": "1264|Phường Châu Phú B",
+              "type": "text"
+            },
+            {
+              "key": "Height",
+              "value": "170",
+              "type": "text"
+            },
+            {
+              "key": "Weight",
+              "value": "59",
+              "type": "text"
+            },
+            {
+              "key": "ApplyExperienceNote",
+              "value": "không co",
+              "type": "text"
+            },
+            {
+              "key": "WishWorkplace",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "undefined",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "chkAgreePolicy",
+              "value": "on",
+              "type": "text"
+            },
+            {
+              "key": "chkAgreePolicy",
+              "value": "on",
+              "type": "text"
+            },
+            {
+              "key": "undefined",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "hdApiURL",
+              "value": "http://210.211.116.71:46694/",
+              "type": "text"
+            },
+            {
+              "key": "hdExamID",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "hdCodeStaff",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "urlHeader",
+              "value": "OT: Peoplelink:sa",
+              "type": "text"
+            },
+            {
+              "key": "undefined",
+              "value": "",
+              "type": "text"
+            },
+            {
+              "key": "StoreShift",
+              "value": "null@null",
+              "type": "text"
+            },
+            {
+              "key": "Register_Store",
+              "value": "null@null",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://recruit.peoplelinkvietnam.com/ProjectHeadcount/Candidate_ApplyRequest_v2",
+          "protocol": "https",
+          "host": [
+            "recruit",
+            "peoplelinkvietnam",
+            "com"
+          ],
+          "path": [
+            "ProjectHeadcount",
+            "Candidate_ApplyRequest_v2"
+          ]
+        },
+        "description": "Generated from cURL: curl 'https://recruit.peoplelinkvietnam.com/ProjectHeadcount/Candidate_ApplyRequest_v2' \\\r\n  -H 'accept: */*' \\\r\n  -H 'accept-language: vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5' \\\r\n  -H 'content-type: multipart/form-data; boundary=----WebKitFormBoundaryhR96SE6ZVFUUzmIp' \\\r\n  -b '_ga=GA1.2.251982480.1781198130; _ga_4S7YSLMS66=GS2.2.s1782837523$o2$g1$t1782838783$j4$l0$h0; ASP.NET_SessionId=gv3hwbyfdu1hxxf4lsvdy5ur' \\\r\n  -H 'origin: https://recruit.peoplelinkvietnam.com' \\\r\n  -H 'priority: u=1, i' \\\r\n  -H 'referer: https://recruit.peoplelinkvietnam.com/ProjectHeadcount/ApplyRequest/2239' \\\r\n  -H 'sec-ch-ua: \"Not;A=Brand\";v=\"8\", \"Chromium\";v=\"150\", \"Google Chrome\";v=\"150\"' \\\r\n  -H 'sec-ch-ua-mobile: ?1' \\\r\n  -H 'sec-ch-ua-platform: \"Android\"' \\\r\n  -H 'sec-fetch-dest: empty' \\\r\n  -H 'sec-fetch-mode: cors' \\\r\n  -H 'sec-fetch-site: same-origin' \\\r\n  -H 'user-agent: Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36' \\\r\n  -H 'x-requested-with: XMLHttpRequest' \\\r\n  --data-raw $'------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"HeadcountReqRecruiterID\"\\r\\n\\r\\n2239\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"RecruiterPIC\"\\r\\n\\r\\n28924\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"HeadcountRequestID\"\\r\\n\\r\\n1828\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"ProjectHeadcountID\"\\r\\n\\r\\n176\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"ProjectHeadcountType\"\\r\\n\\r\\n3\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"Register_Source\"\\r\\n\\r\\nPortal\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"PersonID\"\\r\\n\\r\\n\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"StoreShift[0][StoreID]\"\\r\\n\\r\\nnull\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"StoreShift[0][ShiftID]\"\\r\\n\\r\\nnull\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"Mobile\"\\r\\n\\r\\n0934 213 213\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"FullName\"\\r\\n\\r\\nSomebody\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"Sex\"\\r\\n\\r\\n1\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"Birthday\"\\r\\n\\r\\n07/08/2026\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"AcademicLevel\"\\r\\n\\r\\nĐại học\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"Email\"\\r\\n\\r\\nnhvietanh1910@gmail.com\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"AddrTmpStreet\"\\r\\n\\r\\nsố 19 đường 12\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"AddrTmpProvince\"\\r\\n\\r\\nANGIANG|Tỉnh An Giang\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"AddrTmpDistrict\"\\r\\n\\r\\n210|Thành phố Châu Đốc\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"AddrTmpWard\"\\r\\n\\r\\n1264|Phường Châu Phú B\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"Height\"\\r\\n\\r\\n170\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"Weight\"\\r\\n\\r\\n59\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"ApplyExperienceNote\"\\r\\n\\r\\nkhông co\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"WishWorkplace\"\\r\\n\\r\\n\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"undefined\"\\r\\n\\r\\n\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"chkAgreePolicy\"\\r\\n\\r\\non\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"chkAgreePolicy\"\\r\\n\\r\\non\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"undefined\"\\r\\n\\r\\n\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"hdApiURL\"\\r\\n\\r\\nhttp://210.211.116.71:46694/\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"hdExamID\"\\r\\n\\r\\n\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"hdCodeStaff\"\\r\\n\\r\\n\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"urlHeader\"\\r\\n\\r\\nOT: Peoplelink:sa\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"undefined\"\\r\\n\\r\\n\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"StoreShift\"\\r\\n\\r\\nnull@null\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp\\r\\nContent-Disposition: form-data; name=\"Register_Store\"\\r\\n\\r\\nnull@null\\r\\n------WebKitFormBoundaryhR96SE6ZVFUUzmIp--\\r\\n'"
+      },
+      "response": []
+    }
+  ]
+}

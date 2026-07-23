@@ -1,0 +1,66 @@
+"""One-shot: import provinces from provincedata.text HTML select into SQLite."""
+from __future__ import annotations
+
+import html
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from app.db import get_conn, init_db
+
+SOURCE = ROOT / "provincedata.text"
+OPTION_RE = re.compile(
+    r'<option\s+value="([^"]*)"[^>]*>(.*?)</option>',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def main() -> None:
+    init_db()
+    text = html.unescape(SOURCE.read_text(encoding="utf-8"))
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    rows: list[tuple[str, str, str, str]] = []
+    seen: set[str] = set()
+    for m in OPTION_RE.finditer(text):
+        inserted_value = m.group(1).strip()
+        label = re.sub(r"\s+", " ", m.group(2)).strip()
+        if not inserted_value or "|" not in inserted_value:
+            continue
+        code, name_from_value = inserted_value.split("|", 1)
+        code = code.strip()
+        name = (label or name_from_value).strip()
+        if code in seen:
+            print(f"skip duplicate code: {code}")
+            continue
+        seen.add(code)
+        rows.append((code, name, inserted_value, now))
+
+    with get_conn() as conn:
+        conn.execute("DELETE FROM provinces")
+        conn.executemany(
+            """
+            INSERT INTO provinces (code, name, inserted_value, synced_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            rows,
+        )
+        count = conn.execute("SELECT COUNT(*) AS c FROM provinces").fetchone()["c"]
+        letter = conn.execute(
+            "SELECT COUNT(*) AS c FROM provinces WHERE code GLOB '[A-Z]*'"
+        ).fetchone()["c"]
+        numeric = conn.execute(
+            "SELECT COUNT(*) AS c FROM provinces WHERE code GLOB '[0-9]*'"
+        ).fetchone()["c"]
+
+    print(f"Imported {count} provinces from {SOURCE.name}")
+    print(f"  letter codes: {letter}")
+    print(f"  numeric codes: {numeric}")
+
+
+if __name__ == "__main__":
+    main()

@@ -2,15 +2,8 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-.venv/
-venv/
-.env
 
 # App data
-data/*.db
-data/*.db-*
-data/uploads/
-data/exports/
 
 # IDE / OS
 .idea/

@@ -11,9 +11,46 @@ import httpx
 from app.config import LOCATION_AUTH, URL_LIST_DISTRICT, URL_LIST_WARD
 from app.db import get_conn
 
+# Mã province lỗi: API Area không trả district/ward (vd. Quy Nhơn không phải tỉnh).
+BAD_PROVINCE_CODES: frozenset[str] = frozenset({"QUYNHON"})
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def purge_bad_provinces() -> list[str]:
+    """
+    Xóa province mã sai + mã số (01/79…) khỏi DB.
+
+    Sync location chỉ dùng mã chữ (ANGIANG, HANOI, …). Mã số trùng tên tỉnh
+    nhưng không có district/ward trong DB → dropdown trống / sync lặp vô ích.
+    """
+    removed: list[str] = []
+    with get_conn() as conn:
+        if BAD_PROVINCE_CODES:
+            placeholders = ",".join("?" for _ in BAD_PROVINCE_CODES)
+            rows = conn.execute(
+                f"""
+                SELECT code FROM provinces
+                WHERE code IN ({placeholders}) OR code GLOB '[0-9]*'
+                ORDER BY code
+                """,
+                tuple(sorted(BAD_PROVINCE_CODES)),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT code FROM provinces
+                WHERE code GLOB '[0-9]*'
+                ORDER BY code
+                """
+            ).fetchall()
+        codes = [r["code"] for r in rows]
+        for code in codes:
+            conn.execute("DELETE FROM provinces WHERE code = ?", (code,))
+            removed.append(code)
+    return removed
 
 
 def _options(payload: dict[str, Any]) -> list[tuple[str, str]]:
@@ -87,20 +124,30 @@ def sync_locations(
     province_codes: list[str] | None = None,
     letter_codes_only: bool = True,
     sync_wards: bool = True,
+    purge_bad: bool = True,
     progress: Callable[[str], None] | None = None,
 ) -> SyncResult:
     """
     Loop provinces → districts (Area=province.code) → wards (ID_District=district.id).
 
     letter_codes_only: API Area expects codes like ANGIANG (not numeric 01/79).
+    purge_bad: xóa mã sai / mã số trước khi sync (tránh lặp vô ích).
     """
     result = SyncResult()
     started = _now()
 
+    if purge_bad:
+        removed = purge_bad_provinces()
+        if progress and removed:
+            progress(f"purged bad provinces: {', '.join(removed)}")
+
     with get_conn() as conn:
         if province_codes is None:
             if letter_codes_only:
-                sql = "SELECT code, name FROM provinces WHERE code GLOB '[A-Z]*' ORDER BY code"
+                sql = (
+                    "SELECT code, name FROM provinces "
+                    "WHERE code GLOB '[A-Z]*' ORDER BY code"
+                )
             else:
                 sql = "SELECT code, name FROM provinces ORDER BY code"
             provinces = list(conn.execute(sql))
@@ -112,6 +159,11 @@ def sync_locations(
                 for code in province_codes
             ]
             provinces = [p for p in provinces if p]
+
+        # Bỏ mã đã biết là trống / sai — không gọi API
+        provinces = [
+            p for p in provinces if str(p["code"]) not in BAD_PROVINCE_CODES
+        ]
 
         run_id = conn.execute(
             """
@@ -136,6 +188,10 @@ def sync_locations(
                     districts = fetch_districts(client, pcode)
                 except Exception as exc:  # noqa: BLE001
                     result.errors.append(f"{pcode}: {exc}")
+                    continue
+
+                if not districts:
+                    result.errors.append(f"{pcode}: no districts (skipped)")
                     continue
 
                 result.province_count += 1

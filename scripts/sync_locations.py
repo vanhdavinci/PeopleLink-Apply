@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.db import db_stats, init_db
-from app.services.location_sync import sync_locations
+from app.services.location_sync import purge_bad_provinces, sync_locations
 
 
 def main() -> None:
@@ -30,14 +30,25 @@ def main() -> None:
         action="store_true",
         help="Skip ward sync.",
     )
+    parser.add_argument(
+        "--keep-bad",
+        action="store_true",
+        help="Do not purge QUYNHON / numeric codes before sync.",
+    )
     args = parser.parse_args()
 
     init_db()
+    if not args.keep_bad and args.provinces is None:
+        removed = purge_bad_provinces()
+        if removed:
+            print(f"Purged {len(removed)} bad/numeric provinces: {', '.join(removed)}")
     print("Starting location sync...")
     result = sync_locations(
         province_codes=args.provinces,
         letter_codes_only=not args.all_codes,
         sync_wards=not args.districts_only,
+        # CLI đã purge phía trên — tránh xóa 2 lần
+        purge_bad=False,
         progress=lambda msg: print(msg, flush=True),
     )
     stats = db_stats()

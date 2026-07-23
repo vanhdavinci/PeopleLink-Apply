@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.db import get_conn, init_db
+from app.services.location_sync import BAD_PROVINCE_CODES
 
 SOURCE = ROOT / "provincedata.text"
 OPTION_RE = re.compile(
@@ -26,6 +27,8 @@ def main() -> None:
 
     rows: list[tuple[str, str, str, str]] = []
     seen: set[str] = set()
+    skipped_bad = 0
+    skipped_numeric = 0
     for m in OPTION_RE.finditer(text):
         inserted_value = m.group(1).strip()
         label = re.sub(r"\s+", " ", m.group(2)).strip()
@@ -34,6 +37,14 @@ def main() -> None:
         code, name_from_value = inserted_value.split("|", 1)
         code = code.strip()
         name = (label or name_from_value).strip()
+        if code in BAD_PROVINCE_CODES:
+            skipped_bad += 1
+            print(f"skip bad code: {code}")
+            continue
+        # Chỉ giữ mã chữ — sync Area + dropdown apply dùng ANGIANG/HANOI/...
+        if not code or not code[0].isalpha():
+            skipped_numeric += 1
+            continue
         if code in seen:
             print(f"skip duplicate code: {code}")
             continue
@@ -53,13 +64,11 @@ def main() -> None:
         letter = conn.execute(
             "SELECT COUNT(*) AS c FROM provinces WHERE code GLOB '[A-Z]*'"
         ).fetchone()["c"]
-        numeric = conn.execute(
-            "SELECT COUNT(*) AS c FROM provinces WHERE code GLOB '[0-9]*'"
-        ).fetchone()["c"]
 
     print(f"Imported {count} provinces from {SOURCE.name}")
     print(f"  letter codes: {letter}")
-    print(f"  numeric codes: {numeric}")
+    print(f"  skipped bad: {skipped_bad}")
+    print(f"  skipped numeric: {skipped_numeric}")
 
 
 if __name__ == "__main__":

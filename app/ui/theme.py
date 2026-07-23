@@ -236,9 +236,9 @@ div[data-testid="stHorizontalBlock"]:has(.pl-header-card) {{
   line-height: 1.3;
 }}
 
-/* User card phải */
+/* User card phải — chừa chỗ nút ⚙ absolute */
 .pl-user-card-html {{
-  padding-right: 1rem;
+  padding-right: 3.6rem;
 }}
 
 .pl-user-card-html .pl-user-meta {{
@@ -263,26 +263,7 @@ div[data-testid="stHorizontalBlock"]:has(.pl-header-card) {{
   margin-top: 0.1rem;
 }}
 
-.pl-gear-visual {{
-  flex-shrink: 0;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  border: 1.5px solid var(--pl-rose-soft);
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: 0 4px 12px rgba(212, 106, 146, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--pl-rose-deep);
-  font-size: 1.15rem;
-  line-height: 1;
-  margin-left: auto;
-  pointer-events: none;
-  transition: transform 0.15s ease, background 0.15s ease;
-}}
-
-/* Cột phải: đặt nút Streamlit đè đúng chỗ bánh răng */
+/* Cột phải: đặt nút ⚙ Streamlit đúng chỗ bánh răng */
 div[data-testid="stColumn"]:has(.pl-user-card-html) {{
   position: relative !important;
 }}
@@ -302,32 +283,7 @@ div.st-key-pl_open_avatar .stButton {{
   height: 42px !important;
 }}
 
-div.st-key-pl_open_avatar .stButton > button {{
-  width: 42px !important;
-  height: 42px !important;
-  min-width: 42px !important;
-  max-width: 42px !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  border-radius: 50% !important;
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  opacity: 0 !important;
-  cursor: pointer !important;
-}}
-
-div.st-key-pl_open_avatar .stButton > button:hover {{
-  transform: none !important;
-  opacity: 0 !important;
-}}
-
-div[data-testid="stColumn"]:has(.pl-user-card-html):hover .pl-gear-visual {{
-  transform: rotate(20deg) scale(1.05);
-  background: #fff0f5;
-}}
-
-/* Setup tab gear vẫn hiện rõ */
+div.st-key-pl_open_avatar .stButton > button,
 div.st-key-pl_open_avatar_setup .stButton > button {{
   width: 42px !important;
   height: 42px !important;
@@ -344,6 +300,7 @@ div.st-key-pl_open_avatar_setup .stButton > button {{
   line-height: 1 !important;
 }}
 
+div.st-key-pl_open_avatar .stButton > button:hover,
 div.st-key-pl_open_avatar_setup .stButton > button:hover {{
   transform: rotate(25deg) scale(1.06) !important;
   background: #fff0f5 !important;
@@ -557,12 +514,11 @@ def render_app_header(*, app_name: str, version: str) -> None:
     <span class="pl-user-name">{APP_USER_FULL_NAME}</span>
     <span class="pl-user-hint">Nhấn ⚙ để xem hồ sơ</span>
   </div>
-  <div class="pl-gear-visual" aria-hidden="true">⚙</div>
 </div>
                 """,
                 unsafe_allow_html=True,
             )
-            # Nút trong suốt đè lên bánh răng — mở modal, không reload URL
+            # Một nút ⚙ duy nhất (key=pl_open_avatar) — mở modal hồ sơ
             _render_header_settings_button()
 
 

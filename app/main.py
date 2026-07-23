@@ -113,7 +113,7 @@ with tab_setup:
     st.subheader("Sync địa chỉ (Province → District → Ward)")
     st.caption(
         "Kéo huyện/phường từ Location API vào SQLite — dùng cho dropdown địa chỉ. "
-        "Không cần portal cookie. Có thể mất vài phút."
+        "Tự xóa mã sai (QUYNHON) + mã số trước khi sync. Có thể mất vài phút."
     )
     loc_stats = db_stats()
     l1, l2, l3 = st.columns(3)

@@ -7,11 +7,13 @@ from app.db import get_conn
 
 
 def list_provinces() -> list[dict[str, Any]]:
+    """Chỉ mã chữ (portal apply). Bỏ mã số / mã sai không có district."""
     with get_conn() as conn:
         rows = conn.execute(
             """
             SELECT code, name, inserted_value
             FROM provinces
+            WHERE code GLOB '[A-Z]*'
             ORDER BY name
             """
         ).fetchall()

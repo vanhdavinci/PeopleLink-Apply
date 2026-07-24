@@ -1,37 +1,17 @@
-"""Màn chào mừng / mở khóa app — cùng theme hồng mộng mơ."""
+"""Màn đăng nhập — bảo vệ app, cùng theme hồng mộng mơ."""
 from __future__ import annotations
-
-import random
-from datetime import date, timedelta
 
 import streamlit as st
 
-from app.services.welcome_gate import (
-    EXPECTED_LOVE_DATE,
-    get_saved_gate,
-    save_gate_attempt,
-)
+from app.services.auth import is_authenticated, login
 from app.services.user_service import APP_USER_FIRST_NAME
 
 
-def _random_decoy_date() -> date:
-    """Ngày giả ngẫu nhiên — không trùng ngày đúng."""
-    for _ in range(40):
-        year = random.randint(2018, 2027)
-        month = random.randint(1, 12)
-        day = random.randint(1, 28)
-        decoy = date(year, month, day)
-        if decoy != EXPECTED_LOVE_DATE:
-            return decoy
-    return EXPECTED_LOVE_DATE - timedelta(days=17)
-
-
-def render_welcome_gate() -> bool:
+def render_login_gate() -> bool:
     """
-    Hiện màn chào. Trả về True nếu đã mở khóa (được vào app chính).
+    Hiện màn đăng nhập. Trả về True nếu đã đăng nhập (được vào app chính).
     """
-    saved = get_saved_gate()
-    if saved["is_unlocked"]:
+    if is_authenticated():
         return True
 
     st.markdown(
@@ -84,10 +64,10 @@ def render_welcome_gate() -> bool:
 </style>
 <div class="pl-welcome-wrap">
   <div class="pl-welcome-card">
-    <span class="pl-welcome-kicker">Welcome · {APP_USER_FIRST_NAME} 🌸</span>
-    <h1 class="pl-welcome-title">Queo com cục dàng mét gữi</h1>
+    <span class="pl-welcome-kicker">Login · {APP_USER_FIRST_NAME} 🌸</span>
+    <h1 class="pl-welcome-title">Đăng nhập</h1>
     <p class="pl-welcome-sub">
-      Vui lòng nhập số điện thoại anh iu và ngày em nhận lời iu anh để vào app
+      Nhập tài khoản và mật khẩu để vào app
     </p>
   </div>
 </div>
@@ -95,52 +75,41 @@ def render_welcome_gate() -> bool:
         unsafe_allow_html=True,
     )
 
-    default_phone = saved["phone"] or ""
-    # Ngày mặc định random — không prefill đáp án đúng
-    if "welcome_decoy_date" not in st.session_state:
-        st.session_state.welcome_decoy_date = _random_decoy_date()
-    default_date = st.session_state.welcome_decoy_date
-
     with st.container():
         _c1, c2, _c3 = st.columns([1, 1.35, 1])
         with c2:
-            with st.form("welcome_gate_form", clear_on_submit=False):
-                phone = st.text_input(
-                    "Số điện thoại anh iu",
-                    value=default_phone,
-                    placeholder="0xxx xxx xxx",
-                    help="Nhập số điện thoại (10 số)",
+            with st.form("login_gate_form", clear_on_submit=False):
+                username = st.text_input(
+                    "Tài khoản",
+                    value="",
+                    placeholder="Tên đăng nhập",
+                    autocomplete="username",
                 )
-                love_day = st.date_input(
-                    "Ngày em nhận lời iu anh",
-                    value=default_date,
-                    format="DD/MM/YYYY",
-                    min_value=date(2000, 1, 1),
-                    max_value=date(2099, 12, 31),
+                password = st.text_input(
+                    "Mật khẩu",
+                    value="",
+                    type="password",
+                    placeholder="••••••••",
+                    autocomplete="current-password",
                 )
                 submitted = st.form_submit_button(
-                    "Vào app 💕",
+                    "Đăng nhập",
                     type="primary",
                     use_container_width=True,
                 )
 
             if submitted:
-                result = save_gate_attempt(phone=phone, love_date=love_day)
+                result = login(username=username, password=password)
                 if result["ok"]:
-                    st.session_state.pop("welcome_decoy_date", None)
-                    st.success("Đúng rồi cục dàng 🌸 — đang vào app...")
-                    st.balloons()
+                    st.success("Đăng nhập thành công — đang vào app...")
                     st.rerun()
                 else:
-                    st.session_state.welcome_decoy_date = love_day
-                    st.error(
-                        "Chưa đúng số điện thoại hoặc ngày nhận lời iu — "
-                        "thử lại nha 💗"
-                    )
+                    st.error("Sai tài khoản hoặc mật khẩu — thử lại nha")
 
             st.markdown(
                 '<p class="pl-welcome-hint" style="text-align:center">'
-                "Hai giá trị sẽ được lưu trong máy (SQLite) khi bạn nhập."
+                "Phiên đăng nhập có thời hạn (token ký ngắn hạn). "
+                "Hết hạn hoặc đăng xuất sẽ cần đăng nhập lại."
                 "</p>",
                 unsafe_allow_html=True,
             )

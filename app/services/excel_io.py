@@ -18,9 +18,8 @@ from app.db import get_conn
 from app.services.address_resolve import enrich_row_address
 from app.services.locations import resolve_location_fields
 
-# Columns user fills in Excel
+# Columns user fills in Excel (ApplyURL lấy từ project khi đẩy — không còn trong template)
 CANDIDATE_TEMPLATE_COLUMNS: list[str] = [
-    "ApplyURL",
     "FullName",
     "Mobile",
     "Sex",
@@ -46,15 +45,14 @@ ADDRESS_RUNTIME_COLUMNS: list[str] = [
     "AddressNote",
 ]
 
+# ApplyURL vẫn giữ trong payload (fill từ project lúc đẩy); không bắt buộc trong Excel
 PAYLOAD_COLUMNS: list[str] = list(
-    dict.fromkeys([*CANDIDATE_TEMPLATE_COLUMNS, *ADDRESS_RUNTIME_COLUMNS])
+    dict.fromkeys(
+        ["ApplyURL", *CANDIDATE_TEMPLATE_COLUMNS, *ADDRESS_RUNTIME_COLUMNS]
+    )
 )
 
 COLUMN_GUIDE: dict[str, str] = {
-    "ApplyURL": (
-        "Link ứng tuyển → lấy HeadcountReqRecruiterID, ví dụ "
-        "https://recruit.peoplelinkvietnam.com/ProjectHeadcount/ApplyRequest/2239"
-    ),
     "FullName": "Họ tên ứng viên",
     "Mobile": "Số điện thoại, ví dụ 0934 213 321",
     "Sex": "1 = Nam, 2 = Nữ",
@@ -77,7 +75,6 @@ COLUMN_GUIDE: dict[str, str] = {
 }
 
 EXAMPLE_ROW: dict[str, str] = {
-    "ApplyURL": "https://recruit.peoplelinkvietnam.com/ProjectHeadcount/ApplyRequest/2239",
     "FullName": "Tuấn Trần",
     "Mobile": "0934 213 321",
     "Sex": "1",
@@ -162,7 +159,6 @@ def build_candidate_template_workbook() -> Workbook:
     for idx, col in enumerate(CANDIDATE_TEMPLATE_COLUMNS, start=1):
         width = max(14, min(42, len(col) + 8))
         if col in (
-            "ApplyURL",
             "FullAddress",
             "Email",
         ):
@@ -186,7 +182,8 @@ def build_candidate_template_workbook() -> Workbook:
     notes_lines = [
         "1. Chỉ sửa sheet Candidates. Giữ nguyên tên cột hàng 1.",
         "2. Hàng 2 là ví dụ — có thể xóa hoặc ghi đè bằng dữ liệu thật.",
-        "3. ApplyURL: mỗi dòng có thể cùng 1 link hoặc khác link tùy vị trí tuyển.",
+        "3. ApplyURL KHÔNG còn trong Excel — điền Link Apply trên tab Projects, "
+        "rồi chọn dự án khi đẩy.",
         "4. RecruiterPIC / HeadcountRequestID KHÔNG có trong Excel — lấy từ User trong app.",
         "5. FullAddress: một dòng địa chỉ thuần. App tự tách Province/District/Ward.",
         "   - Địa chỉ cũ (có huyện/quận) → tự tách.",

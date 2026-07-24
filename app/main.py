@@ -13,17 +13,21 @@ import streamlit as st
 from app.config import APP_NAME, APP_VERSION
 from app.db import db_stats, init_db
 from app.services.location_sync import sync_locations
-from app.services.project_sync import mark_expired_projects, sync_projects
 from app.services.user_service import (
     ensure_app_user,
-    list_user_projects,
     update_app_user_fields,
 )
 from app.services.ward_mapping import import_ward_mapping_csv, mapping_stats
-from app.services.welcome_gate import is_unlocked
+from app.services.auth import (
+    current_username,
+    is_authenticated,
+    logout,
+    session_expires_in_seconds,
+)
 from app.ui.candidates import render_candidates_workspace
+from app.ui.projects import render_projects_workspace
 from app.ui.theme import bootstrap_theme, render_app_header, render_setup_user_card
-from app.ui.welcome import render_welcome_gate
+from app.ui.welcome import render_login_gate
 
 st.set_page_config(
     page_title=APP_NAME,
@@ -36,8 +40,8 @@ bootstrap_theme()
 with st.spinner("Khởi tạo database..."):
     db_path = init_db()
 
-# —— Màn chào / mở khóa ——
-if not is_unlocked():
+# —— Đăng nhập ——
+if not is_authenticated():
     st.markdown(
         f"""
 <div style="text-align:center;margin:0.5rem 0 0.25rem 0">
@@ -47,10 +51,10 @@ if not is_unlocked():
         """,
         unsafe_allow_html=True,
     )
-    render_welcome_gate()
+    render_login_gate()
     st.stop()
 
-# —— App chính (đã mở khóa) ——
+# —— App chính (đã đăng nhập) ——
 render_app_header(app_name=APP_NAME, version=APP_VERSION)
 
 stats = db_stats()
@@ -63,26 +67,28 @@ m3.metric("Wards", stats["wards"])
 m4.metric("Projects", stats["projects"])
 m5.metric("Candidates", stats.get("candidates", 0))
 
-if "portal_cookie" not in st.session_state:
-    st.session_state.portal_cookie = ""
-
-with st.expander("Portal cookie (chỉ dùng cho Sync Projects)", expanded=False):
-    st.text_area(
-        "Cookie",
-        height=72,
-        placeholder="ASP.NET_SessionId=...; _ga=...",
-        key="portal_cookie",
-        label_visibility="collapsed",
-    )
-    st.caption("Chỉ cần khi Sync Projects — đẩy apply không cần cookie.")
-
-tab_work, tab_setup = st.tabs(["Ứng viên", "Thiết lập"])
+tab_work, tab_projects, tab_setup = st.tabs(
+    ["Ứng viên", "Projects", "Thiết lập"]
+)
 
 with tab_work:
     render_candidates_workspace()
 
+with tab_projects:
+    render_projects_workspace()
+
 with tab_setup:
     render_setup_user_card(app_user)
+    remaining = session_expires_in_seconds()
+    who = current_username()
+    if who:
+        st.caption(f"Đăng nhập: **{who}**")
+    if remaining is not None:
+        mins = remaining // 60
+        st.caption(f"Phiên còn khoảng **{mins} phút** (tự gia hạn khi còn dùng app).")
+    if st.button("Đăng xuất", key="btn_logout"):
+        logout()
+        st.rerun()
     with st.form("user_fields_form"):
         col_u1, col_u2 = st.columns(2)
         with col_u1:
@@ -152,51 +158,6 @@ with tab_setup:
                 st.rerun()
             except Exception as exc:  # noqa: BLE001
                 st.error(str(exc))
-
-    st.divider()
-    st.subheader("Sync Projects")
-    st.caption("Dùng cookie ở expander phía trên → Sync Projects.")
-
-    col_a, col_b = st.columns(2)
-    with col_a:
-        sync_clicked = st.button("Sync Projects", type="primary", use_container_width=True)
-    with col_b:
-        expire_clicked = st.button(
-            "Đánh dấu project hết hạn", use_container_width=True
-        )
-
-    if sync_clicked:
-        cookie = (st.session_state.get("portal_cookie") or "").strip()
-        if not cookie:
-            st.error("Dán portal cookie ở expander phía trên trước.")
-        else:
-            try:
-                with st.spinner("Đang sync projects..."):
-                    result = sync_projects(cookie=cookie, save_cookie=False)
-                st.success(
-                    f"OK — projects={result.project_count}, "
-                    f"members={result.member_count}, "
-                    f"mới hết hạn={result.expired_count}"
-                )
-                if result.errors:
-                    st.warning("\n".join(result.errors[:10]))
-                st.rerun()
-            except Exception as exc:  # noqa: BLE001
-                st.error(str(exc))
-
-    if expire_clicked:
-        result = mark_expired_projects()
-        st.info(
-            f"Đã đánh dấu hết hạn: {result.expired_count} · "
-            f"gỡ hết hạn: {result.unexpired_count} · "
-            f"tổng expired hiện tại: {result.project_count}"
-        )
-        st.rerun()
-
-    user_projects = list_user_projects()
-    st.write(f"Projects gắn user: **{len(user_projects)}**")
-    if user_projects:
-        st.dataframe(user_projects, use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("Mapping địa chỉ (cũ ↔ mới)")

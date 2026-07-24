@@ -107,25 +107,29 @@ def link_members_to_app_user(conn=None) -> int:
 
 def list_user_projects(user_id: int | None = None) -> list[dict[str, Any]]:
     """Projects where this user appears in Members (for later list UI)."""
-    user = ensure_app_user() if user_id is None else None
-    uid = user_id if user_id is not None else user["id"]
-    with get_conn() as conn:
-        rows = conn.execute(
-            """
-            SELECT
-                p.project_id,
-                p.project_code,
-                p.project_name,
-                p.start_date,
-                p.end_date,
-                p.is_expired,
-                p.total_percent_target,
-                pm.full_name AS member_full_name
-            FROM project_members pm
-            JOIN projects p ON p.project_id = pm.project_id
-            WHERE pm.user_id = ?
-            ORDER BY (p.end_date IS NULL), p.end_date DESC, p.project_id DESC
-            """,
-            (uid,),
-        ).fetchall()
-    return [dict(r) for r in rows]
+    from app.services.project_service import list_projects_for_user
+
+    if user_id is not None:
+        # legacy path — keep query for non-default user
+        with get_conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    p.project_id,
+                    p.project_code,
+                    p.project_name,
+                    p.start_date,
+                    p.end_date,
+                    p.is_expired,
+                    p.total_percent_target,
+                    p.link_apply,
+                    pm.full_name AS member_full_name
+                FROM project_members pm
+                JOIN projects p ON p.project_id = pm.project_id
+                WHERE pm.user_id = ?
+                ORDER BY (p.end_date IS NULL), p.end_date DESC, p.project_id DESC
+                """,
+                (user_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+    return list_projects_for_user(include_expired=True)

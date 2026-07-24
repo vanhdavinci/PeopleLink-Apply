@@ -7,6 +7,7 @@ from pathlib import Path
 import streamlit as st
 
 from app.config import ROOT_DIR
+from app.services.auth import logout
 from app.services.user_service import APP_USER_FIRST_NAME, APP_USER_FULL_NAME
 
 PICTURES_DIR = ROOT_DIR / "pictures"
@@ -113,16 +114,25 @@ h1, h2, h3, .pl-brand-title {{
 
 button[data-baseweb="tab"] {{
   font-family: "Nunito", sans-serif !important;
-  font-weight: 700 !important;
+  font-weight: 800 !important;
+  font-size: 1.12rem !important;
+  letter-spacing: 0.02em !important;
   color: var(--pl-muted) !important;
+  padding: 0.65rem 1.1rem !important;
 }}
 
 button[data-baseweb="tab"][aria-selected="true"] {{
   color: var(--pl-rose-deep) !important;
+  font-size: 1.18rem !important;
 }}
 
 [data-baseweb="tab-highlight"] {{
   background-color: var(--pl-rose) !important;
+  height: 3px !important;
+}}
+
+[data-baseweb="tab-border"] {{
+  height: 2px !important;
 }}
 
 .stButton > button {{
@@ -426,7 +436,10 @@ def open_avatar_dialog() -> None:
         unsafe_allow_html=True,
     )
     st.markdown("</div>", unsafe_allow_html=True)
-    if st.button("Đóng", use_container_width=True, type="primary"):
+    if st.button("Đóng", use_container_width=True, type="primary", key="pl_avatar_close"):
+        st.rerun()
+    if st.button("Đăng xuất", use_container_width=True, key="pl_avatar_logout"):
+        logout()
         st.rerun()
 
 

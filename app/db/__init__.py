@@ -18,6 +18,9 @@ _PROJECT_COLUMNS: dict[str, str] = {
     "total_percent_target": "INTEGER",
     "is_expired": "INTEGER NOT NULL DEFAULT 0",
     "expired_marked_at": "TEXT",
+    "link_apply": "TEXT",
+    "article_html": "TEXT",
+    "article_updated_at": "TEXT",
 }
 
 _SYNC_RUN_COLUMNS: dict[str, str] = {
@@ -64,6 +67,39 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_members_user ON project_members(user_id)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS submitted_candidates (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id    INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            full_name     TEXT NOT NULL,
+            mobile        TEXT NOT NULL,
+            submitted_at  TEXT NOT NULL,
+            UNIQUE (project_id, mobile)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_submitted_mobile ON submitted_candidates(mobile)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_submitted_project ON submitted_candidates(project_id)"
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS project_article_images (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id     INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            rel_path       TEXT NOT NULL,
+            original_name  TEXT,
+            uploaded_at    TEXT NOT NULL
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_article_images_project "
+        "ON project_article_images(project_id)"
     )
 
 
@@ -125,6 +161,7 @@ def db_stats() -> dict[str, int]:
         "users",
         "apply_links",
         "candidates",
+        "submitted_candidates",
         "sync_runs",
         "ward_address_mappings",
     )

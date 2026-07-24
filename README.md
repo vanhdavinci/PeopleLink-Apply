@@ -33,6 +33,14 @@ Lần đầu app sẽ tạo `data/peoplelink.db` (SQLite).
 
 Mở trình duyệt tại URL Streamlit in ra (thường `http://localhost:8501`).
 
+Trang đầu yêu cầu **đăng nhập**. Một account: `PEOPLELINK_AUTH_USERNAME` / `PEOPLELINK_AUTH_PASSWORD` (mặc định `kimngaan` / `230426`). Nhiều account dùng JSON:
+
+```env
+PEOPLELINK_AUTH_USERS={"kimngaan":"230426","vietanh":"pass2","admin":"pass3"}
+```
+
+Phiên dùng **token ký ngắn hạn** theo từng tab/browser: mặc định **4 giờ** (`PEOPLELINK_AUTH_SESSION_HOURS`), tự gia hạn khi còn dùng; hết hạn hoặc **Đăng xuất** phải login lại.
+
 ## Cấu trúc
 
 ```

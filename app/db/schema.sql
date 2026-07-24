@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS projects (
     total_percent_target    INTEGER,
     is_expired              INTEGER NOT NULL DEFAULT 0,  -- 0 active | 1 expired
     expired_marked_at       TEXT,
+    link_apply              TEXT,          -- ApplyRequest URL — user điền tay
+    article_html            TEXT,          -- bài viết (HTML: đậm/nghiêng/cỡ chữ)
+    article_updated_at      TEXT,
     raw_json                TEXT,
     synced_at               TEXT
 );
@@ -136,6 +139,31 @@ CREATE TABLE IF NOT EXISTS candidates (
 
 CREATE INDEX IF NOT EXISTS idx_candidates_batch ON candidates(batch_id);
 CREATE INDEX IF NOT EXISTS idx_candidates_status ON candidates(status);
+
+-- Ứng viên đã đẩy thành công (giữ khi xóa batch) — chỉ tên + SĐT + project
+CREATE TABLE IF NOT EXISTS submitted_candidates (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id    INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    full_name     TEXT NOT NULL,
+    mobile        TEXT NOT NULL,
+    submitted_at  TEXT NOT NULL,
+    UNIQUE (project_id, mobile)
+);
+
+CREATE INDEX IF NOT EXISTS idx_submitted_mobile ON submitted_candidates(mobile);
+CREATE INDEX IF NOT EXISTS idx_submitted_project ON submitted_candidates(project_id);
+
+-- Ảnh đính kèm bài viết theo project
+CREATE TABLE IF NOT EXISTS project_article_images (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id     INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    rel_path       TEXT NOT NULL,
+    original_name  TEXT,
+    uploaded_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_article_images_project
+    ON project_article_images(project_id);
 
 -- Ward address mapping (portal/old admin ↔ new 2-level admin after 01/07/2025)
 -- Source CSV: ward_mapping_old_to_new.csv

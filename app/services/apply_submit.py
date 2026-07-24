@@ -350,6 +350,19 @@ def submit_batch_candidates(
     if not override_project_id:
         raise ValueError("Chọn dự án (ProjectHeadcountID) trước khi đẩy.")
 
+    from app.services.project_service import get_project
+    from app.services.submitted_candidates import record_submission
+
+    project = get_project(int(override_project_id))
+    if project is None:
+        raise ValueError(f"Không thấy project #{override_project_id} trong DB.")
+    project_apply_url = str(project.get("link_apply") or "").strip()
+    if not project_apply_url:
+        raise ValueError(
+            f"Project #{override_project_id} chưa có Link Apply — "
+            "vào tab Projects → Xem chi tiết → điền và Lưu."
+        )
+
     items = list_imported_candidates(batch_id=batch_id)
     if not items:
         raise ValueError(f"Batch #{batch_id} không có ứng viên.")
@@ -383,9 +396,11 @@ def submit_batch_candidates(
         cid = int(item["_id"])
         row_no = int(item.get("_row_no") or i + 1)
         full_name = str(item.get("FullName") or "")
-        apply_url = str(item.get("ApplyURL") or "").strip()
+        mobile = str(item.get("Mobile") or "")
+        apply_url = project_apply_url
         payload = {col: str(item.get(col) or "") for col in PAYLOAD_COLUMNS}
         payload["ProjectHeadcountID"] = override_project_id
+        payload["ApplyURL"] = apply_url
 
         if progress:
             progress(f"[{i + 1}/{len(items)}] {full_name or f'row {row_no}'}")
@@ -400,7 +415,7 @@ def submit_batch_candidates(
 
         try:
             if not apply_url:
-                raise ValueError("Thiếu ApplyURL trên dòng ứng viên.")
+                raise ValueError("Thiếu Link Apply trên project.")
             built = build_apply_request(
                 apply_url=apply_url,
                 candidate=payload,
@@ -431,6 +446,14 @@ def submit_batch_candidates(
                     submitted_at,
                     cid,
                 ),
+            )
+
+        if result.status == "success":
+            record_submission(
+                project_id=int(override_project_id),
+                full_name=full_name,
+                mobile=mobile,
+                submitted_at=submitted_at,
             )
 
         results.append(result)

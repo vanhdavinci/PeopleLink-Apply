@@ -5,6 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from app.services.address_resolve import (
+    ADDR_STATUS_CONFIRMED,
     ADDR_STATUS_NEW,
     ADDR_STATUS_OLD,
     ADDR_STATUS_PARTIAL,
@@ -41,11 +42,12 @@ from app.services.locations import (
     ward_option_value,
 )
 from app.services.user_service import list_user_projects
+from app.services.submitted_candidates import annotate_rows_submitted
+from app.services.project_service import get_project
 
 # Visible grid: import fields + address resolve status + submit result
 _GRID_COLUMNS = [
-    "SubmitStatus",
-    "SubmitError",
+    "Submitted",
     "AddressIcon",
     "FullName",
     "Mobile",
@@ -54,8 +56,6 @@ _GRID_COLUMNS = [
     "AddrTmpProvince",
     "AddrTmpDistrict",
     "AddrTmpWard",
-    "AddressNote",
-    "ApplyURL",
     "Sex",
     "Birthday",
     "AcademicLevel",
@@ -65,9 +65,22 @@ _GRID_COLUMNS = [
     "ApplyExperienceNote",
     "WishWorkplace",
     "ProjectHeadcountType",
+    "AddressNote",
+    "SubmitStatus",
+    "SubmitError",
 ]
 
 _META_KEYS = ("_candidate_id", "SubmitStatus", "SubmitError")
+
+# Key widget data_editor — giữ ổn định; chỉ xóa khi mở/đóng batch hoặc commit có chủ đích
+_EDITOR_KEY = "draft_candidates_editor_v8"
+_EDITOR_KEYS_LEGACY = (
+    "draft_candidates_editor_v4",
+    "draft_candidates_editor_v5",
+    "draft_candidates_editor_v6",
+    "draft_candidates_editor_v7",
+    _EDITOR_KEY,
+)
 
 
 def _ensure_state() -> None:
@@ -78,6 +91,7 @@ def _ensure_state() -> None:
         "addr_edit_idx": 0,
         "last_submit_results": [],
         "ws_mode": "pick",  # pick | edit
+        "grid_working_rows": None,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -85,8 +99,9 @@ def _ensure_state() -> None:
 
 
 def _clear_editor_widgets() -> None:
-    st.session_state.pop("draft_candidates_editor_v4", None)
-    st.session_state.pop("draft_candidates_editor_v5", None)
+    for key in _EDITOR_KEYS_LEGACY:
+        st.session_state.pop(key, None)
+    st.session_state.pop("grid_working_rows", None)
     for k in list(st.session_state.keys()):
         if str(k).startswith("addr_"):
             del st.session_state[k]
@@ -94,7 +109,9 @@ def _clear_editor_widgets() -> None:
 
 def _open_batch(batch_id: int) -> None:
     rows, filename = load_batch_as_draft(batch_id)
-    st.session_state.draft_candidates = enrich_rows(rows, force=False)
+    st.session_state.draft_candidates = annotate_rows_submitted(
+        enrich_rows(rows, force=False)
+    )
     st.session_state.draft_filename = filename
     st.session_state.draft_batch_id = batch_id
     st.session_state.addr_edit_idx = 0
@@ -122,9 +139,16 @@ def _draft_to_dataframe(rows: list[dict]) -> pd.DataFrame:
 
 
 def _rows_from_editor(
-    edited_df: pd.DataFrame, previous: list[dict]
+    edited_df: pd.DataFrame,
+    previous: list[dict],
+    *,
+    auto_enrich: bool = False,
 ) -> list[dict[str, str]]:
-    """Merge editor columns with hidden/runtime fields from previous draft."""
+    """Merge editor columns with hidden/runtime fields from previous draft.
+
+    auto_enrich=False (mặc định): không resolve địa chỉ khi đang gõ/dán —
+    tránh remount lưới và mất dữ liệu vừa nhập.
+    """
     working: list[dict[str, str]] = []
     for i, (_, series) in enumerate(edited_df.iterrows()):
         prev = previous[i] if i < len(previous) else {}
@@ -136,6 +160,11 @@ def _rows_from_editor(
             if col in series.index:
                 val = series.get(col)
                 row[col] = "" if pd.isna(val) else str(val).strip()
+            # Giữ AddressStatus/Icon/Note từ prev nếu cột không nằm trên lưới edit
+        for extra in ("AddressStatus", "AddressIcon", "AddressNote"):
+            if extra not in row or not row.get(extra):
+                if prev.get(extra) is not None:
+                    row[extra] = str(prev.get(extra) or "")
         if not any(
             str(v).strip()
             for k, v in row.items()
@@ -148,16 +177,41 @@ def _rows_from_editor(
             row["SubmitStatus"] = str(prev.get("SubmitStatus") or "pending")
         if not row.get("SubmitError"):
             row["SubmitError"] = str(prev.get("SubmitError") or "")
-        # Re-resolve when FullAddress changed
-        prev_full = str(prev.get("FullAddress") or "").strip()
-        new_full = str(row.get("FullAddress") or "").strip()
-        if new_full and new_full != prev_full:
-            row["AddressStatus"] = ""
-            row = enrich_row_address(row, force=True)
-        elif not row.get("AddressStatus"):
-            row = enrich_row_address(row, force=False)
+        if auto_enrich:
+            prev_full = str(prev.get("FullAddress") or "").strip()
+            new_full = str(row.get("FullAddress") or "").strip()
+            if new_full and new_full != prev_full:
+                row["AddressStatus"] = ""
+                row = enrich_row_address(row, force=True)
+            elif not row.get("AddressStatus"):
+                row = enrich_row_address(row, force=False)
         working.append(row)
     return working
+
+
+def _get_editor_working_rows(*, auto_enrich: bool = False) -> list[dict]:
+    """Đọc dữ liệu hiện tại từ widget data_editor (nếu có), không ghi đè draft."""
+    draft = list(st.session_state.get("draft_candidates") or [])
+    edited = st.session_state.get(_EDITOR_KEY)
+    if isinstance(edited, pd.DataFrame):
+        rows = _rows_from_editor(edited, draft, auto_enrich=auto_enrich)
+        rows = annotate_rows_submitted(rows)
+        st.session_state.grid_working_rows = rows
+        return rows
+    cached = st.session_state.get("grid_working_rows")
+    if isinstance(cached, list) and cached:
+        return annotate_rows_submitted(cached)
+    return annotate_rows_submitted(draft)
+
+
+def _commit_working_rows(rows: list[dict], *, clear_editor: bool = True) -> None:
+    """Ghi nhận lưới vào draft (sau Lưu / Đẩy / Áp dụng địa chỉ / Quét lại)."""
+    stamped = annotate_rows_submitted(rows)
+    st.session_state.draft_candidates = stamped
+    st.session_state.grid_working_rows = stamped
+    if clear_editor:
+        for key in _EDITOR_KEYS_LEGACY:
+            st.session_state.pop(key, None)
 
 
 def _attach_candidate_ids(rows: list[dict], candidate_ids: list[int]) -> list[dict]:
@@ -174,7 +228,9 @@ def _attach_candidate_ids(rows: list[dict], candidate_ids: list[int]) -> list[di
 
 def _reload_draft_from_batch(batch_id: int) -> None:
     rows, filename = load_batch_as_draft(batch_id)
-    st.session_state.draft_candidates = enrich_rows(rows, force=False)
+    st.session_state.draft_candidates = annotate_rows_submitted(
+        enrich_rows(rows, force=False)
+    )
     st.session_state.draft_filename = filename
     st.session_state.draft_batch_id = batch_id
     _clear_editor_widgets()
@@ -306,7 +362,7 @@ def _render_pick_screen(batches: list[dict]) -> None:
                 use_container_width=True,
             ):
                 try:
-                    rows = parse_candidates_excel(uploaded.getvalue())
+                    rows = annotate_rows_submitted(parse_candidates_excel(uploaded.getvalue()))
                     for r in rows:
                         r["SubmitStatus"] = "pending"
                         r["SubmitError"] = ""
@@ -381,10 +437,13 @@ def _address_suggest_modal(row_idx: int, row: dict) -> None:
     with c1:
         if st.button("Xác nhận map", type="primary", use_container_width=True):
             try:
-                draft = list(st.session_state.draft_candidates)
-                draft[row_idx] = apply_suggestion_to_row(draft[row_idx], suggestions[choice])
-                st.session_state.draft_candidates = draft
-                _clear_editor_widgets()
+                draft = _get_editor_working_rows(auto_enrich=False)
+                if row_idx >= len(draft):
+                    raise IndexError("Dòng không còn trong lưới")
+                draft[row_idx] = apply_suggestion_to_row(
+                    draft[row_idx], suggestions[choice]
+                )
+                _commit_working_rows(draft, clear_editor=True)
                 st.session_state["ws_addr_flash"] = (
                     f"Đã map dòng #{row_idx + 1} → địa chỉ cũ."
                 )
@@ -393,13 +452,13 @@ def _address_suggest_modal(row_idx: int, row: dict) -> None:
                 st.error(str(exc))
     with c2:
         if st.button("Giữ nguyên", use_container_width=True):
-            draft = list(st.session_state.draft_candidates)
-            draft[row_idx] = mark_address_kept(draft[row_idx])
-            st.session_state.draft_candidates = draft
-            _clear_editor_widgets()
-            st.session_state["ws_addr_flash"] = (
-                f"Giữ nguyên dòng #{row_idx + 1} (chưa map)."
-            )
+            draft = _get_editor_working_rows(auto_enrich=False)
+            if row_idx < len(draft):
+                draft[row_idx] = mark_address_kept(draft[row_idx])
+                _commit_working_rows(draft, clear_editor=True)
+                st.session_state["ws_addr_flash"] = (
+                    f"Giữ nguyên dòng #{row_idx + 1} (chưa map)."
+                )
             st.rerun()
     with c3:
         if st.button("Đóng", use_container_width=True):
@@ -509,10 +568,25 @@ def _render_address_panel(working_rows: list[dict]) -> list[dict]:
     m3.metric("Tổng dòng", len(working_rows))
     with m4:
         st.write("")
-        if st.button("Quét lại từ FullAddress", use_container_width=True):
-            working_rows = enrich_rows(working_rows, force=True)
-            st.session_state.draft_candidates = working_rows
-            _clear_editor_widgets()
+        if st.button(
+            "Quét lại từ FullAddress",
+            use_container_width=True,
+            help="Chỉ quét dòng chưa có ✓ (đã áp dụng / map xong thì bỏ qua)",
+        ):
+            before = _get_editor_working_rows(auto_enrich=False)
+            skipped = sum(
+                1
+                for r in before
+                if (r.get("AddressIcon") or "").strip() == "✓"
+                or (r.get("AddressStatus") or "")
+                in {ADDR_STATUS_OLD, ADDR_STATUS_CONFIRMED}
+            )
+            working_rows = enrich_rows(before, force=False, skip_ticked=True)
+            _commit_working_rows(working_rows, clear_editor=True)
+            scanned = max(0, len(before) - skipped)
+            st.session_state["ws_addr_flash"] = (
+                f"Đã quét {scanned} dòng · bỏ qua {skipped} dòng đã ✓."
+            )
             st.rerun()
 
     # —— Bước 1 & 2: cùng layout card, chỉ khác badge + nội dung ——
@@ -665,26 +739,31 @@ def _render_address_panel(working_rows: list[dict]) -> list[dict]:
             if not new_prov or not new_dist:
                 st.error("Cần chọn ít nhất Tỉnh và Huyện/TP/Quận.")
             else:
-                working_rows[idx]["AddrTmpProvince"] = new_prov
-                working_rows[idx]["AddrTmpDistrict"] = new_dist
-                working_rows[idx]["AddrTmpWard"] = new_ward
-                working_rows[idx].update(resolve_location_fields(working_rows[idx]))
-                if new_ward:
-                    working_rows[idx]["AddressStatus"] = ADDR_STATUS_OLD
-                    working_rows[idx]["AddressIcon"] = STATUS_ICON[ADDR_STATUS_OLD]
-                    working_rows[idx]["AddressNote"] = (
-                        "Đã chọn thủ công Province/District/Ward"
-                    )
+                working_rows = _get_editor_working_rows(auto_enrich=False)
+                if idx >= len(working_rows):
+                    st.error("Dòng không còn trong lưới — thử chọn lại.")
                 else:
-                    working_rows[idx]["AddressStatus"] = ADDR_STATUS_PARTIAL
-                    working_rows[idx]["AddressIcon"] = STATUS_ICON[ADDR_STATUS_PARTIAL]
-                    working_rows[idx]["AddressNote"] = (
-                        "Đã chọn tỉnh + huyện — phường để trống (điền sau)"
-                    )
-                st.session_state.draft_candidates = working_rows
-                _clear_editor_widgets()
-                st.success(f"Đã áp dụng địa chỉ dòng #{idx + 1}.")
-                st.rerun()
+                    working_rows[idx]["AddrTmpProvince"] = new_prov
+                    working_rows[idx]["AddrTmpDistrict"] = new_dist
+                    working_rows[idx]["AddrTmpWard"] = new_ward
+                    working_rows[idx].update(resolve_location_fields(working_rows[idx]))
+                    if new_ward:
+                        working_rows[idx]["AddressStatus"] = ADDR_STATUS_OLD
+                        working_rows[idx]["AddressIcon"] = STATUS_ICON[ADDR_STATUS_OLD]
+                        working_rows[idx]["AddressNote"] = (
+                            "Đã chọn thủ công Province/District/Ward"
+                        )
+                    else:
+                        working_rows[idx]["AddressStatus"] = ADDR_STATUS_PARTIAL
+                        working_rows[idx]["AddressIcon"] = STATUS_ICON[
+                            ADDR_STATUS_PARTIAL
+                        ]
+                        working_rows[idx]["AddressNote"] = (
+                            "Đã chọn tỉnh + huyện — phường để trống (điền sau)"
+                        )
+                    _commit_working_rows(working_rows, clear_editor=True)
+                    st.success(f"Đã áp dụng địa chỉ dòng #{idx + 1}.")
+                    st.rerun()
 
     return working_rows
 
@@ -708,7 +787,7 @@ def _persist_working_rows(
             filename=filename or "manual.xlsx",
         )
     stamped = _attach_candidate_ids(final_rows, result.get("candidate_ids") or [])
-    st.session_state.draft_candidates = stamped
+    _commit_working_rows(stamped, clear_editor=True)
     st.session_state.draft_batch_id = result["batch_id"]
     return int(result["batch_id"])
 
@@ -780,7 +859,18 @@ def _render_push_panel(
                 st.caption("Phải chọn dự án trước khi đẩy — không có mặc định.")
             else:
                 selected_project_id = labels[choice]
-                st.caption(f"ProjectHeadcountID = `{selected_project_id}`")
+                proj = get_project(int(selected_project_id))
+                link = (proj or {}).get("link_apply") or ""
+                if link:
+                    st.caption(
+                        f"ProjectHeadcountID=`{selected_project_id}` · "
+                        f"Link Apply đã có."
+                    )
+                else:
+                    st.error(
+                        f"Project `{selected_project_id}` chưa có Link Apply — "
+                        "vào tab Projects → Xem chi tiết để điền."
+                    )
     with c2:
         st.metric("Chờ đẩy", pending_n)
     with c3:
@@ -789,19 +879,23 @@ def _render_push_panel(
         st.metric("OK", ok_n)
 
     push_n = pending_n + fail_n
+    has_link = True
+    if selected_project_id:
+        proj = get_project(int(selected_project_id))
+        has_link = bool((proj or {}).get("link_apply"))
     b1, b2 = st.columns(2)
     with b1:
         push = st.button(
             f"Đẩy chưa thành công ({push_n})",
             type="primary",
             use_container_width=True,
-            disabled=not selected_project_id or push_n == 0,
+            disabled=not selected_project_id or not has_link or push_n == 0,
         )
     with b2:
         retry = st.button(
             f"Đẩy lại dòng lỗi ({fail_n})",
             use_container_width=True,
-            disabled=not selected_project_id or fail_n == 0,
+            disabled=not selected_project_id or not has_link or fail_n == 0,
         )
 
     def _run_push(*, only_failed: bool) -> None:
@@ -897,6 +991,70 @@ def _render_push_panel(
             st.code(r["response_body"] or "(empty)", language="text")
 
 
+@st.fragment
+def _render_candidates_grid() -> None:
+    """Lưới chỉnh sửa — fragment để sửa ô không remount cả trang / nhảy về đầu."""
+    draft: list[dict] = list(st.session_state.draft_candidates or [])
+    edited_df = st.data_editor(
+        _draft_to_dataframe(draft),
+        use_container_width=True,
+        num_rows="dynamic",
+        hide_index=False,
+        height=380,
+        column_config={
+            "Submitted": st.column_config.TextColumn(
+                "Submitted",
+                help="✓ = SĐT đã từng đẩy thành công (giữ khi xóa batch)",
+                width="small",
+                disabled=True,
+            ),
+            "SubmitStatus": st.column_config.TextColumn(
+                "Push",
+                help="pending · success · failed — lưu cùng batch, không sửa tay",
+                width="small",
+                disabled=True,
+            ),
+            "SubmitError": st.column_config.TextColumn(
+                "Lỗi push",
+                help="Chi tiết lỗi lần đẩy gần nhất (sửa dữ liệu rồi Đẩy lại dòng lỗi)",
+                width="medium",
+                disabled=True,
+            ),
+            "AddressIcon": st.column_config.TextColumn(
+                "★",
+                help="✓ đủ · … một phần · ★ gợi ý mới · ? chưa nhận ra",
+                width="small",
+            ),
+            "FullName": st.column_config.TextColumn("Họ tên", required=True),
+            "Mobile": st.column_config.TextColumn("SĐT", width="small"),
+            "FullAddress": st.column_config.TextColumn(
+                "Địa chỉ (1 dòng)",
+                help="Nhập địa chỉ thuần; bấm «Quét lại từ FullAddress» để tách Prov/Dist/Ward",
+                width="large",
+            ),
+            "AddrTmpStreet": st.column_config.TextColumn("Đường", width="small"),
+            "AddrTmpProvince": st.column_config.TextColumn("Tỉnh"),
+            "AddrTmpDistrict": st.column_config.TextColumn("TP/Quận"),
+            "AddrTmpWard": st.column_config.TextColumn("Phường"),
+            "AddressNote": st.column_config.TextColumn("Ghi chú ĐC", width="medium"),
+            "Sex": st.column_config.TextColumn("Sex", help="1 Nam · 2 Nữ", width="small"),
+            "Birthday": st.column_config.TextColumn("NS", width="small"),
+            "AcademicLevel": st.column_config.TextColumn("Học vấn"),
+            "Email": st.column_config.TextColumn("Email"),
+            "Height": st.column_config.TextColumn("Cao", width="small"),
+            "Weight": st.column_config.TextColumn("Nặng", width="small"),
+            "ApplyExperienceNote": st.column_config.TextColumn("Kinh nghiệm"),
+            "WishWorkplace": st.column_config.TextColumn("Wish"),
+            "ProjectHeadcountType": st.column_config.TextColumn("Type", width="small"),
+        },
+        key=_EDITOR_KEY,
+    )
+    # Chỉ cache working rows — không ghi đè draft_candidates (tránh reset lưới)
+    st.session_state.grid_working_rows = _rows_from_editor(
+        edited_df, draft, auto_enrich=False
+    )
+
+
 def _render_edit_screen() -> None:
     draft: list[dict] = st.session_state.draft_candidates
     batch_id = st.session_state.draft_batch_id
@@ -924,58 +1082,13 @@ def _render_edit_screen() -> None:
 
     if not saved:
         st.caption("File mới — có thể **Lưu** hoặc chọn dự án rồi **Đẩy** (tự lưu).")
-
-    edited_df = st.data_editor(
-        _draft_to_dataframe(draft),
-        use_container_width=True,
-        num_rows="dynamic",
-        hide_index=False,
-        height=380,
-        column_config={
-            "SubmitStatus": st.column_config.TextColumn(
-                "Push",
-                help="pending · success · failed — lưu cùng batch, không sửa tay",
-                width="small",
-                disabled=True,
-            ),
-            "SubmitError": st.column_config.TextColumn(
-                "Lỗi push",
-                help="Chi tiết lỗi lần đẩy gần nhất (sửa dữ liệu rồi Đẩy lại dòng lỗi)",
-                width="medium",
-                disabled=True,
-            ),
-            "AddressIcon": st.column_config.TextColumn(
-                "★",
-                help="✓ đủ · … một phần · ★ gợi ý mới · ? chưa nhận ra",
-                width="small",
-            ),
-            "FullName": st.column_config.TextColumn("Họ tên", required=True),
-            "Mobile": st.column_config.TextColumn("SĐT", width="small"),
-            "FullAddress": st.column_config.TextColumn(
-                "Địa chỉ (1 dòng)",
-                help="Nhập địa chỉ thuần; app tách Prov/Dist/Ward",
-                width="large",
-            ),
-            "AddrTmpStreet": st.column_config.TextColumn("Đường", width="small"),
-            "AddrTmpProvince": st.column_config.TextColumn("Tỉnh"),
-            "AddrTmpDistrict": st.column_config.TextColumn("TP/Quận"),
-            "AddrTmpWard": st.column_config.TextColumn("Phường"),
-            "AddressNote": st.column_config.TextColumn("Ghi chú ĐC", width="medium"),
-            "ApplyURL": st.column_config.TextColumn("ApplyURL", width="medium"),
-            "Sex": st.column_config.TextColumn("Sex", help="1 Nam · 2 Nữ", width="small"),
-            "Birthday": st.column_config.TextColumn("NS", width="small"),
-            "AcademicLevel": st.column_config.TextColumn("Học vấn"),
-            "Email": st.column_config.TextColumn("Email"),
-            "Height": st.column_config.TextColumn("Cao", width="small"),
-            "Weight": st.column_config.TextColumn("Nặng", width="small"),
-            "ApplyExperienceNote": st.column_config.TextColumn("Kinh nghiệm"),
-            "WishWorkplace": st.column_config.TextColumn("Wish"),
-            "ProjectHeadcountType": st.column_config.TextColumn("Type", width="small"),
-        },
-        key="draft_candidates_editor_v5",
+    st.caption(
+        "Gõ/dán trực tiếp trên lưới — dữ liệu giữ nguyên khi sửa. "
+        "Sau khi sửa FullAddress, bấm **Quét lại từ FullAddress** để tách tỉnh/huyện/xã."
     )
 
-    working_rows = _rows_from_editor(edited_df, draft)
+    _render_candidates_grid()
+    working_rows = _get_editor_working_rows(auto_enrich=False)
     if not working_rows:
         st.warning("Lưới trống — thêm ít nhất 1 dòng.")
         return
@@ -991,12 +1104,13 @@ def _render_edit_screen() -> None:
         )
         if st.button(save_label, type="primary", use_container_width=True):
             try:
+                rows = _get_editor_working_rows(auto_enrich=False)
                 new_id = _persist_working_rows(
-                    working_rows,
+                    rows,
                     batch_id=batch_id,
                     filename=filename or "manual.xlsx",
                 )
-                st.success(f"Đã lưu batch #{new_id} — {len(working_rows)} ứng viên.")
+                st.success(f"Đã lưu batch #{new_id} — {len(rows)} ứng viên.")
                 st.rerun()
             except Exception as exc:  # noqa: BLE001
                 st.error(str(exc))
@@ -1005,13 +1119,12 @@ def _render_edit_screen() -> None:
             _close_draft()
             st.rerun()
 
-    st.session_state.draft_candidates = working_rows
-
     st.divider()
+    rows_for_push = _get_editor_working_rows(auto_enrich=False)
     _render_push_panel(
         int(batch_id) if batch_id is not None else 0,
-        len(working_rows),
-        working_rows=working_rows,
+        len(rows_for_push),
+        working_rows=rows_for_push,
         filename=filename or "manual.xlsx",
     )
 
@@ -1022,7 +1135,8 @@ def render_candidates_workspace() -> None:
     st.caption(
         "Import Excel (FullAddress 1 dòng) → app tách địa chỉ · "
         "★ = địa chỉ mới cần xác nhận map → lưu → chọn dự án & đẩy. "
-        "Status từng dòng (success/failed) lưu cùng batch; sửa lưới rồi đẩy lại dòng lỗi."
+        "Apply URL lấy từ **Link Apply** của project (tab Projects). "
+        "Cột Submitted = SĐT đã từng đẩy thành công (giữ khi xóa batch)."
     )
 
     batches = list_import_batches()

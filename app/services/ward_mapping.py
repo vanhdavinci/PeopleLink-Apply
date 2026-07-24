@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import csv
+import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,6 +14,42 @@ from app.db import get_conn
 DEFAULT_MAPPING_CSV = ROOT_DIR / "ward_mapping_old_to_new.csv"
 
 _BOOL_TRUE = {"1", "true", "yes", "y", "t"}
+
+_ADMIN_PREFIXES = (
+    "thành phố ",
+    "tp. ",
+    "tp ",
+    "tỉnh ",
+    "quận ",
+    "huyện ",
+    "thị xã ",
+    "thị trấn ",
+    "phường ",
+    "xã ",
+    "p. ",
+    "p ",
+)
+
+
+def _fold_vn(text: str) -> str:
+    raw = unicodedata.normalize("NFD", (text or "").strip())
+    raw = "".join(c for c in raw if unicodedata.category(c) != "Mn")
+    raw = re.sub(r"\s+", " ", raw)
+    return raw.casefold()
+
+
+def _strip_admin_prefix(text: str) -> str:
+    t = (text or "").strip()
+    lower = t.casefold()
+    for prefix in _ADMIN_PREFIXES:
+        if lower.startswith(prefix):
+            return t[len(prefix) :].strip()
+    return t
+
+
+def _place_key(text: str) -> str:
+    """Khóa so khớp: bỏ tiền tố hành chính + không dấu."""
+    return _fold_vn(_strip_admin_prefix(text) or text)
 
 
 def _cell(row: dict[str, str], *keys: str) -> str:
@@ -190,6 +228,9 @@ def lookup_new_to_old(
     """
     New admin → portal/old options (để submit portal).
     Match by new_ward_code, or new_ward (+ optional new_province).
+
+    Tên xã/tỉnh so khớp linh hoạt: «Mỹ hạnh» ≈ «Xã Mỹ Hạnh»,
+    «Tây Ninh» ≈ «Tỉnh Tây Ninh» (bỏ dấu / tiền tố).
     """
     new_ward_code = (new_ward_code or "").strip()
     new_ward = (new_ward or "").strip()
@@ -203,6 +244,7 @@ def lookup_new_to_old(
         clauses.append("new_ward_code = ?")
         params.append(new_ward_code)
     else:
+        # exact trước (nhanh), fallback fuzzy bên dưới
         clauses.append("new_ward = ?")
         params.append(new_ward)
         if new_province:
@@ -217,6 +259,30 @@ def lookup_new_to_old(
     """
     with get_conn() as conn:
         rows = _rows_to_dicts(conn.execute(sql, params).fetchall())
+
+        if not rows and not new_ward_code and new_ward:
+            ward_key = _place_key(new_ward)
+            prov_key = _place_key(new_province) if new_province else ""
+            candidates = _rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT *
+                    FROM ward_address_mappings
+                    WHERE match_status IN ('MAPPED', 'MAPPED_DIVIDED')
+                    ORDER BY is_default_new_ward DESC, id ASC
+                    """
+                ).fetchall()
+            )
+            matched: list[dict[str, Any]] = []
+            matched_any_prov: list[dict[str, Any]] = []
+            for r in candidates:
+                if _place_key(str(r.get("new_ward") or "")) != ward_key:
+                    continue
+                matched_any_prov.append(r)
+                if not prov_key or _place_key(str(r.get("new_province") or "")) == prov_key:
+                    matched.append(r)
+            rows = matched if matched else matched_any_prov
+
     if prefer_default and rows:
         defaults = [r for r in rows if int(r.get("is_default_new_ward") or 0) == 1]
         if defaults:

@@ -842,14 +842,20 @@ def mark_address_kept(row: dict[str, Any]) -> dict[str, str]:
     return {k: "" if v is None else str(v) for k, v in out.items()}
 
 
-def enrich_row_address(row: dict[str, Any], *, force: bool = False) -> dict[str, str]:
+def enrich_row_address(
+    row: dict[str, Any],
+    *,
+    force: bool = False,
+    skip_ticked: bool = False,
+) -> dict[str, str]:
     """
     Resolve FullAddress into AddrTmp* + status.
     Skip if already confirmed/kept/old_ok unless force=True.
-    Also re-resolve when FullAddress present and status empty/new/unresolved.
+    skip_ticked: bỏ qua dòng đã ✓ (áp dụng / map xong) — dùng cho «Quét lại».
     """
     out = {k: "" if v is None else str(v) for k, v in dict(row).items()}
     status = (out.get("AddressStatus") or "").strip()
+    icon = (out.get("AddressIcon") or "").strip()
     full = (out.get("FullAddress") or "").strip()
 
     # Legacy rows: already have Prov/Dist/Ward, no FullAddress
@@ -864,6 +870,14 @@ def enrich_row_address(row: dict[str, Any], *, force: bool = False) -> dict[str,
         out["AddressStatus"] = ADDR_STATUS_EMPTY
         out["AddressIcon"] = ""
         out["AddressNote"] = ""
+        return out
+
+    ticked = icon == "✓" or status in {
+        ADDR_STATUS_CONFIRMED,
+        ADDR_STATUS_OLD,
+    }
+    if skip_ticked and ticked and not force:
+        out["AddressIcon"] = "✓"
         return out
 
     if not force and status in {
@@ -891,5 +905,12 @@ def suggestions_for_row(row: dict[str, Any]) -> list[AddressSuggestion]:
     return resolve_full_address(full).suggestions
 
 
-def enrich_rows(rows: list[dict[str, Any]], *, force: bool = False) -> list[dict[str, str]]:
-    return [enrich_row_address(r, force=force) for r in rows]
+def enrich_rows(
+    rows: list[dict[str, Any]],
+    *,
+    force: bool = False,
+    skip_ticked: bool = False,
+) -> list[dict[str, str]]:
+    return [
+        enrich_row_address(r, force=force, skip_ticked=skip_ticked) for r in rows
+    ]

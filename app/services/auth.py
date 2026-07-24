@@ -1,4 +1,8 @@
-"""Login gate: DB auth_users + short-lived signed session token."""
+"""Login gate: DB auth_users + short-lived signed session token.
+
+Token được cất trong cookie trình duyệt (không đưa lên URL), hết hạn theo
+PEOPLELINK_AUTH_SESSION_HOURS (mặc định 4h). Secrets chỉ seed user / ký HMAC.
+"""
 from __future__ import annotations
 
 import base64
@@ -8,10 +12,11 @@ import json
 import os
 import secrets
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import streamlit as st
+from extra_streamlit_components import CookieManager
 
 from app.db import get_conn
 
@@ -30,6 +35,9 @@ DEFAULT_AUTH_SEED: dict[str, str] = {
 
 SESSION_TOKEN_KEY = "pl_auth_token"
 SESSION_USER_KEY = "pl_auth_username"
+COOKIE_NAME = "pl_auth_token"
+_COOKIE_MGR_STATE = "_pl_cookie_mgr"
+_LEGACY_QUERY_TOKEN_KEY = "pl_auth"
 
 _HASH_PREFIX = "pbkdf2_sha256"
 _HASH_ITERATIONS = 120_000
@@ -37,6 +45,26 @@ _HASH_ITERATIONS = 120_000
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def bootstrap_auth_storage() -> CookieManager:
+    """Mount cookie bridge — gọi 1 lần đầu mỗi script run, trước check login."""
+    cm = CookieManager(key="pl_auth_cookie_mgr")
+    st.session_state[_COOKIE_MGR_STATE] = cm
+    # Dọn token cũ từng để trên URL (nếu còn)
+    try:
+        if _LEGACY_QUERY_TOKEN_KEY in st.query_params:
+            del st.query_params[_LEGACY_QUERY_TOKEN_KEY]
+    except Exception:
+        pass
+    return cm
+
+
+def _cookie_manager() -> CookieManager | None:
+    cm = st.session_state.get(_COOKIE_MGR_STATE)
+    if isinstance(cm, CookieManager):
+        return cm
+    return None
 
 
 def _from_secrets(name: str) -> Any | None:
@@ -272,19 +300,80 @@ def parse_token(token: str | None) -> dict[str, Any] | None:
     return payload
 
 
+def _cookie_token_raw() -> str:
+    cm = _cookie_manager()
+    if cm is None:
+        return ""
+    try:
+        val = cm.get(COOKIE_NAME)
+    except Exception:
+        return ""
+    return str(val or "").strip()
+
+
+def _set_cookie_token(token: str) -> None:
+    """Cất token vào cookie browser; Max-Age = TTL session."""
+    cm = _cookie_manager()
+    if cm is None:
+        return
+    text = (token or "").strip()
+    try:
+        if text:
+            ttl = session_ttl_seconds()
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+            cm.set(
+                COOKIE_NAME,
+                text,
+                key="pl_auth_cookie_set",
+                path="/",
+                expires_at=expires_at,
+                max_age=float(ttl),
+                same_site="lax",
+            )
+        else:
+            cookies = cm.cookies or {}
+            if COOKIE_NAME in cookies:
+                cm.delete(COOKIE_NAME, key="pl_auth_cookie_del")
+            else:
+                # Vẫn gửi lệnh xóa phía browser nếu cache local chưa có key
+                cm.cookie_manager(
+                    method="delete",
+                    cookie=COOKIE_NAME,
+                    key="pl_auth_cookie_del",
+                    default=False,
+                )
+    except Exception:
+        pass
+
+
 def _store_token(token: str, username: str) -> None:
-    # Chỉ lưu theo phiên browser (session_state) — nhiều account không đụng token chung.
     st.session_state[SESSION_TOKEN_KEY] = token
     st.session_state[SESSION_USER_KEY] = username
+    _set_cookie_token(token)
 
 
 def _clear_token_storage() -> None:
     st.session_state.pop(SESSION_TOKEN_KEY, None)
     st.session_state.pop(SESSION_USER_KEY, None)
+    _set_cookie_token("")
 
 
 def _load_token() -> str:
-    return str(st.session_state.get(SESSION_TOKEN_KEY) or "").strip()
+    token = str(st.session_state.get(SESSION_TOKEN_KEY) or "").strip()
+    if token:
+        return token
+
+    # F5 / session Streamlit mới: lấy từ cookie nếu còn hạn.
+    token = _cookie_token_raw()
+    if not token:
+        return ""
+    payload = parse_token(token)
+    if payload is None:
+        _set_cookie_token("")
+        return ""
+    st.session_state[SESSION_TOKEN_KEY] = token
+    st.session_state[SESSION_USER_KEY] = str(payload["u"])
+    return token
 
 
 def _maybe_slide_refresh(payload: dict[str, Any], token: str) -> str:

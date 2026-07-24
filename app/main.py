@@ -19,6 +19,7 @@ from app.services.user_service import (
 )
 from app.services.ward_mapping import import_ward_mapping_csv, mapping_stats
 from app.services.auth import (
+    bootstrap_auth_storage,
     is_authenticated,
     logout,
     session_expires_in_seconds,
@@ -35,6 +36,7 @@ st.set_page_config(
 )
 
 bootstrap_theme()
+bootstrap_auth_storage()
 
 with st.spinner("Khởi tạo database..."):
     init_db()

@@ -4,7 +4,7 @@ __pycache__/
 *.egg-info/
 
 # App data
-
+.env
 # IDE / OS
 .idea/
 .vscode/

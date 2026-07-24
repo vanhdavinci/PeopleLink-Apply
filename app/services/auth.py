@@ -7,12 +7,11 @@ import hmac
 import json
 import os
 import time
-from functools import lru_cache
 from typing import Any
 
 import streamlit as st
 
-# Defaults for local app — override via .env
+# Defaults for local app — override via .env hoặc Streamlit Secrets
 DEFAULT_USERNAME = "kimngaan"
 DEFAULT_PASSWORD = "230426"
 DEFAULT_SESSION_HOURS = 4
@@ -22,8 +21,33 @@ SESSION_TOKEN_KEY = "pl_auth_token"
 SESSION_USER_KEY = "pl_auth_username"
 
 
+def _from_secrets(name: str) -> Any | None:
+    """Đọc Streamlit Cloud / .streamlit/secrets.toml (không có thì None)."""
+    try:
+        secrets = st.secrets
+    except Exception:
+        return None
+    try:
+        if name in secrets:
+            return secrets[name]
+    except Exception:
+        return None
+    return None
+
+
+def _setting_str(name: str, default: str = "") -> str:
+    val = _from_secrets(name)
+    if val is None:
+        return (os.getenv(name) or default).strip()
+    if isinstance(val, (dict, list)):
+        return json.dumps(val, ensure_ascii=False)
+    return str(val).strip()
+
+
 def session_ttl_seconds() -> int:
-    raw = os.getenv("PEOPLELINK_AUTH_SESSION_HOURS", str(DEFAULT_SESSION_HOURS))
+    raw = _setting_str(
+        "PEOPLELINK_AUTH_SESSION_HOURS", str(DEFAULT_SESSION_HOURS)
+    )
     try:
         hours = float(raw)
     except ValueError:
@@ -32,20 +56,36 @@ def session_ttl_seconds() -> int:
 
 
 def _secret() -> bytes:
-    return (os.getenv("PEOPLELINK_AUTH_SECRET") or DEFAULT_AUTH_SECRET).encode("utf-8")
+    return (
+        _setting_str("PEOPLELINK_AUTH_SECRET") or DEFAULT_AUTH_SECRET
+    ).encode("utf-8")
 
 
-@lru_cache(maxsize=1)
 def load_accounts() -> dict[str, str]:
     """
     Map username → password.
 
-    Ưu tiên PEOPLELINK_AUTH_USERS (JSON), ví dụ 3 account:
-      PEOPLELINK_AUTH_USERS={"kimngaan":"230426","vietanh":"secret2","admin":"secret3"}
-
-    Fallback: PEOPLELINK_AUTH_USERNAME + PEOPLELINK_AUTH_PASSWORD (1 account).
+    Nguồn (theo thứ tự):
+      1. st.secrets PEOPLELINK_AUTH_USERS — dict TOML hoặc chuỗi JSON
+      2. env PEOPLELINK_AUTH_USERS (JSON)
+      3. PEOPLELINK_AUTH_USERNAME + PEOPLELINK_AUTH_PASSWORD / default
     """
-    raw = (os.getenv("PEOPLELINK_AUTH_USERS") or "").strip()
+    users_secret = _from_secrets("PEOPLELINK_AUTH_USERS")
+    if isinstance(users_secret, dict) and users_secret:
+        accounts = {
+            str(user).strip(): str(password)
+            for user, password in users_secret.items()
+            if str(user).strip()
+        }
+        if accounts:
+            return accounts
+
+    raw = ""
+    if isinstance(users_secret, str):
+        raw = users_secret.strip()
+    if not raw:
+        raw = (os.getenv("PEOPLELINK_AUTH_USERS") or "").strip()
+
     if raw:
         try:
             data = json.loads(raw)
@@ -65,8 +105,8 @@ def load_accounts() -> dict[str, str]:
             raise ValueError("PEOPLELINK_AUTH_USERS không có username hợp lệ")
         return accounts
 
-    user = (os.getenv("PEOPLELINK_AUTH_USERNAME") or DEFAULT_USERNAME).strip()
-    password = os.getenv("PEOPLELINK_AUTH_PASSWORD") or DEFAULT_PASSWORD
+    user = _setting_str("PEOPLELINK_AUTH_USERNAME", DEFAULT_USERNAME)
+    password = _setting_str("PEOPLELINK_AUTH_PASSWORD", DEFAULT_PASSWORD) or DEFAULT_PASSWORD
     return {user: password}
 
 

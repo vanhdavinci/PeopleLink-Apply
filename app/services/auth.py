@@ -37,6 +37,7 @@ SESSION_TOKEN_KEY = "pl_auth_token"
 SESSION_USER_KEY = "pl_auth_username"
 COOKIE_NAME = "pl_auth_token"
 _COOKIE_MGR_STATE = "_pl_cookie_mgr"
+_FORCE_LOGOUT_KEY = "_pl_auth_force_logout"
 _LEGACY_QUERY_TOKEN_KEY = "pl_auth"
 
 _HASH_PREFIX = "pbkdf2_sha256"
@@ -311,6 +312,11 @@ def _cookie_token_raw() -> str:
     return str(val or "").strip()
 
 
+def _unique_cookie_key(prefix: str) -> str:
+    # CookieManager cần key mới mỗi lần set/delete thì component mới chạy lại.
+    return f"{prefix}_{int(time.time() * 1000)}"
+
+
 def _set_cookie_token(token: str) -> None:
     """Cất token vào cookie browser; Max-Age = TTL session."""
     cm = _cookie_manager()
@@ -318,35 +324,48 @@ def _set_cookie_token(token: str) -> None:
         return
     text = (token or "").strip()
     try:
-        if text:
-            ttl = session_ttl_seconds()
-            expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
-            cm.set(
-                COOKIE_NAME,
-                text,
-                key="pl_auth_cookie_set",
-                path="/",
-                expires_at=expires_at,
-                max_age=float(ttl),
-                same_site="lax",
-            )
-        else:
-            cookies = cm.cookies or {}
-            if COOKIE_NAME in cookies:
-                cm.delete(COOKIE_NAME, key="pl_auth_cookie_del")
-            else:
-                # Vẫn gửi lệnh xóa phía browser nếu cache local chưa có key
-                cm.cookie_manager(
-                    method="delete",
-                    cookie=COOKIE_NAME,
-                    key="pl_auth_cookie_del",
-                    default=False,
-                )
+        ttl = session_ttl_seconds()
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=ttl)
+        cm.set(
+            COOKIE_NAME,
+            text,
+            key=_unique_cookie_key("pl_auth_cookie_set"),
+            path="/",
+            expires_at=expires_at,
+            max_age=float(ttl),
+            same_site="lax",
+        )
+    except Exception:
+        pass
+
+
+def _delete_cookie_token() -> None:
+    """Xóa cookie: max_age=0 + expires quá khứ (delete() của lib hay fail/race)."""
+    cm = _cookie_manager()
+    if cm is None:
+        return
+    try:
+        cm.set(
+            COOKIE_NAME,
+            "",
+            key=_unique_cookie_key("pl_auth_cookie_clear"),
+            path="/",
+            expires_at=datetime(1970, 1, 1, tzinfo=timezone.utc),
+            max_age=0.0,
+            same_site="lax",
+        )
+        if isinstance(cm.cookies, dict):
+            cm.cookies.pop(COOKIE_NAME, None)
+    except Exception:
+        pass
+    try:
+        cm.delete(COOKIE_NAME, key=_unique_cookie_key("pl_auth_cookie_del"))
     except Exception:
         pass
 
 
 def _store_token(token: str, username: str) -> None:
+    st.session_state.pop(_FORCE_LOGOUT_KEY, None)
     st.session_state[SESSION_TOKEN_KEY] = token
     st.session_state[SESSION_USER_KEY] = username
     _set_cookie_token(token)
@@ -355,10 +374,20 @@ def _store_token(token: str, username: str) -> None:
 def _clear_token_storage() -> None:
     st.session_state.pop(SESSION_TOKEN_KEY, None)
     st.session_state.pop(SESSION_USER_KEY, None)
-    _set_cookie_token("")
+    st.session_state[_FORCE_LOGOUT_KEY] = True
+    _delete_cookie_token()
 
 
 def _load_token() -> str:
+    # Sau logout: không hydrate lại từ cookie cho đến khi cookie thật sự hết.
+    if st.session_state.get(_FORCE_LOGOUT_KEY):
+        leftover = _cookie_token_raw()
+        if leftover:
+            _delete_cookie_token()
+            return ""
+        st.session_state.pop(_FORCE_LOGOUT_KEY, None)
+        return ""
+
     token = str(st.session_state.get(SESSION_TOKEN_KEY) or "").strip()
     if token:
         return token
@@ -369,7 +398,7 @@ def _load_token() -> str:
         return ""
     payload = parse_token(token)
     if payload is None:
-        _set_cookie_token("")
+        _delete_cookie_token()
         return ""
     st.session_state[SESSION_TOKEN_KEY] = token
     st.session_state[SESSION_USER_KEY] = str(payload["u"])
@@ -446,6 +475,7 @@ def login(*, username: str, password: str) -> dict[str, Any]:
     ok = verify_credentials(username=username, password=password)
     user = (username or "").strip()
     if ok:
+        st.session_state.pop(_FORCE_LOGOUT_KEY, None)
         token = issue_token(user)
         _store_token(token, user)
     return {

@@ -646,10 +646,9 @@ def render_setup_user_card(app_user: dict) -> None:
     with c1:
         _render_avatar_image(size="lg", centered=True)
     with c2:
-        st.subheader("User")
+        st.subheader("Bùi Thị Kim Ngân")
         st.caption(
-            f"App dùng cho **{APP_USER_FULL_NAME}** — "
-            "RecruiterPIC / HeadcountRequestID dùng khi đẩy apply."
+            f"Talent Acquisition Assistant - PeopleLink"
         )
         st.write(
             f"RecruiterPIC hiện tại: `{app_user.get('recruiter_pic') or '—'}` · "

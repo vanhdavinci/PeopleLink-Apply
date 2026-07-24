@@ -740,11 +740,6 @@ def _render_project_detail_page(project_id: int) -> None:
 
 def _render_project_list() -> None:
     st.subheader("Projects")
-    st.caption(
-        "Sync từ portal → xem thẻ → **Xem chi tiết** để điền Link Apply "
-        "và xem ứng viên đã submit."
-    )
-
     if "portal_cookie" not in st.session_state:
         st.session_state.portal_cookie = ""
 

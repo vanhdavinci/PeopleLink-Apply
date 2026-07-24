@@ -19,7 +19,6 @@ from app.services.user_service import (
 )
 from app.services.ward_mapping import import_ward_mapping_csv, mapping_stats
 from app.services.auth import (
-    current_username,
     is_authenticated,
     logout,
     session_expires_in_seconds,
@@ -38,15 +37,15 @@ st.set_page_config(
 bootstrap_theme()
 
 with st.spinner("Khởi tạo database..."):
-    db_path = init_db()
+    init_db()
 
 # —— Đăng nhập ——
 if not is_authenticated():
     st.markdown(
         f"""
 <div style="text-align:center;margin:0.5rem 0 0.25rem 0">
-  <h1 class="pl-brand-title" style="font-size:1.65rem !important">{APP_NAME}</h1>
-  <p class="pl-brand-sub">v{APP_VERSION} · local 🌸</p>
+  <h1 class="pl-brand-title" style="font-size:1.65rem !important">KimNgaan's Tool</h1>
+  <p class="pl-brand-sub">🌸🌸🌸🌸🌸</p>
 </div>
         """,
         unsafe_allow_html=True,
@@ -81,15 +80,8 @@ with tab_projects:
 with tab_setup:
     render_setup_user_card(app_user)
     remaining = session_expires_in_seconds()
-    who = current_username()
-    if who:
-        st.caption(f"Đăng nhập: **{who}**")
     if remaining is not None:
         mins = remaining // 60
-        st.caption(f"Phiên còn khoảng **{mins} phút** (tự gia hạn khi còn dùng app).")
-    if st.button("Đăng xuất", key="btn_logout"):
-        logout()
-        st.rerun()
     with st.form("user_fields_form"):
         col_u1, col_u2 = st.columns(2)
         with col_u1:
@@ -104,7 +96,7 @@ with tab_setup:
                 value=app_user.get("headcount_request_id") or "",
                 placeholder="1823",
             )
-        saved = st.form_submit_button("Lưu User", type="primary")
+        saved = st.form_submit_button("Save", type="primary")
     if saved:
         updated = update_app_user_fields(
             recruiter_pic=recruiter_pic,
@@ -118,10 +110,6 @@ with tab_setup:
 
     st.divider()
     st.subheader("Sync địa chỉ (Province → District → Ward)")
-    st.caption(
-        "Kéo huyện/phường từ Location API vào SQLite — dùng cho dropdown địa chỉ. "
-        "Tự xóa mã sai (QUYNHON) + mã số trước khi sync. Có thể mất vài phút."
-    )
     loc_stats = db_stats()
     l1, l2, l3 = st.columns(3)
     l1.metric("Provinces", loc_stats["provinces"])
@@ -162,10 +150,6 @@ with tab_setup:
 
     st.divider()
     st.subheader("Mapping địa chỉ (cũ ↔ mới)")
-    st.caption(
-        "CSV `ward_mapping_old_to_new.csv` — portal chỉ nhận địa chỉ cũ "
-        "(tỉnh/huyện/xã). Batch có thể nhập địa chỉ mới; mapping dùng để quy đổi sau."
-    )
     wstats = mapping_stats()
     w1, w2, w3, w4 = st.columns(4)
     w1.metric("Tổng dòng", wstats["total"])
@@ -184,7 +168,3 @@ with tab_setup:
             st.rerun()
         except Exception as exc:  # noqa: BLE001
             st.error(str(exc))
-
-    with st.expander("DB / đường dẫn"):
-        st.write(f"SQLite: `{db_path}`")
-        st.json(db_stats())

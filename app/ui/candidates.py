@@ -165,12 +165,6 @@ def _rows_from_editor(
             if extra not in row or not row.get(extra):
                 if prev.get(extra) is not None:
                     row[extra] = str(prev.get(extra) or "")
-        if not any(
-            str(v).strip()
-            for k, v in row.items()
-            if k not in _META_KEYS and k not in {"SubmitStatus", "SubmitError"}
-        ):
-            continue
         if not row.get("ProjectHeadcountType"):
             row["ProjectHeadcountType"] = "3"
         if not row.get("SubmitStatus"):
@@ -185,6 +179,7 @@ def _rows_from_editor(
                 row = enrich_row_address(row, force=True)
             elif not row.get("AddressStatus"):
                 row = enrich_row_address(row, force=False)
+        # Giữ mọi dòng (kể cả trống) để index trùng cột số trên lưới
         working.append(row)
     return working
 
@@ -409,7 +404,7 @@ def _render_pick_screen(batches: list[dict]) -> None:
 @st.dialog("Gợi ý địa chỉ cũ")
 def _address_suggest_modal(row_idx: int, row: dict) -> None:
     full = str(row.get("FullAddress") or "")
-    name = str(row.get("FullName") or f"dòng #{row_idx + 1}")
+    name = str(row.get("FullName") or f"dòng {row_idx}")
     st.markdown(f"**{name}**")
     st.caption(f"Địa chỉ nhập: `{full}`")
 
@@ -445,7 +440,7 @@ def _address_suggest_modal(row_idx: int, row: dict) -> None:
                 )
                 _commit_working_rows(draft, clear_editor=True)
                 st.session_state["ws_addr_flash"] = (
-                    f"Đã map dòng #{row_idx + 1} → địa chỉ cũ."
+                    f"Đã map dòng {row_idx} → địa chỉ cũ."
                 )
                 st.rerun()
             except Exception as exc:  # noqa: BLE001
@@ -457,7 +452,7 @@ def _address_suggest_modal(row_idx: int, row: dict) -> None:
                 draft[row_idx] = mark_address_kept(draft[row_idx])
                 _commit_working_rows(draft, clear_editor=True)
                 st.session_state["ws_addr_flash"] = (
-                    f"Giữ nguyên dòng #{row_idx + 1} (chưa map)."
+                    f"Giữ nguyên dòng {row_idx} (chưa map)."
                 )
             st.rerun()
     with c3:
@@ -557,7 +552,6 @@ def _render_address_panel(working_rows: list[dict]) -> list[dict]:
     st.markdown("### Địa chỉ")
     st.markdown(
         '<p class="pl-addr-desc">'
-        "Excel chỉ cần <b>FullAddress</b> một dòng. "
         "✓ đủ · … thiếu phường · ★ cần gợi ý · ? chưa nhận ra."
         "</p>",
         unsafe_allow_html=True,
@@ -610,7 +604,7 @@ def _render_address_panel(working_rows: list[dict]) -> list[dict]:
             st.warning(f"Còn **{len(flagged)}** dòng cần xem gợi ý.")
             for i, row in flagged:
                 label = (
-                    f"{row.get('AddressIcon') or '?'}  **#{i + 1}** · "
+                    f"{row.get('AddressIcon') or '?'}  **Dòng {i}** · "
                     f"{row.get('FullName') or '(chưa tên)'}"
                 )
                 b1, b2 = st.columns([4, 1.1], vertical_alignment="center")
@@ -645,16 +639,16 @@ def _render_address_panel(working_rows: list[dict]) -> list[dict]:
             unsafe_allow_html=True,
         )
         row_labels = [
-            f"#{i + 1} {r.get('AddressIcon') or ''} — "
-            f"{r.get('FullName') or '(chưa tên)'} — "
+            f"Dòng {i} {r.get('AddressIcon') or ''} — "
+            f"{r.get('FullName') or '(trống)'} — "
             f"{(r.get('FullAddress') or r.get('AddrTmpProvince') or '')[:60]}"
             for i, r in enumerate(working_rows)
         ]
         idx = st.selectbox(
-            "Chọn dòng cần sửa",
+            "Chọn dòng cần sửa (số trùng cột index trên lưới)",
             options=list(range(len(working_rows))),
             format_func=lambda i: row_labels[i],
-            key="addr_manual_row_select",
+            key="addr_manual_row_select_v2",
         )
         st.session_state.addr_edit_idx = idx
         row = working_rows[idx]
@@ -762,7 +756,7 @@ def _render_address_panel(working_rows: list[dict]) -> list[dict]:
                             "Đã chọn tỉnh + huyện — phường để trống (điền sau)"
                         )
                     _commit_working_rows(working_rows, clear_editor=True)
-                    st.success(f"Đã áp dụng địa chỉ dòng #{idx + 1}.")
+                    st.success(f"Đã áp dụng địa chỉ dòng {idx}.")
                     st.rerun()
 
     return working_rows
@@ -776,9 +770,16 @@ def _persist_working_rows(
 ) -> int:
     final_rows = []
     for r in working_rows:
+        # Bỏ dòng trống khi lưu (giữ trên lưới chỉ để khớp index)
+        if not str(r.get("FullName") or "").strip() and not str(
+            r.get("Mobile") or ""
+        ).strip():
+            continue
         item = dict(r)
         item.update(resolve_location_fields(item))
         final_rows.append(item)
+    if not final_rows:
+        raise ValueError("Không có dòng nào để lưu (cần Họ tên hoặc SĐT).")
     if batch_id is not None:
         result = update_candidates_batch(int(batch_id), final_rows)
     else:
@@ -1080,13 +1081,6 @@ def _render_edit_screen() -> None:
     if addr_flash:
         st.success(addr_flash)
 
-    if not saved:
-        st.caption("File mới — có thể **Lưu** hoặc chọn dự án rồi **Đẩy** (tự lưu).")
-    st.caption(
-        "Gõ/dán trực tiếp trên lưới — dữ liệu giữ nguyên khi sửa. "
-        "Sau khi sửa FullAddress, bấm **Quét lại từ FullAddress** để tách tỉnh/huyện/xã."
-    )
-
     _render_candidates_grid()
     working_rows = _get_editor_working_rows(auto_enrich=False)
     if not working_rows:
@@ -1133,10 +1127,7 @@ def render_candidates_workspace() -> None:
     _ensure_state()
     st.subheader("Ứng viên")
     st.caption(
-        "Import Excel (FullAddress 1 dòng) → app tách địa chỉ · "
-        "★ = địa chỉ mới cần xác nhận map → lưu → chọn dự án & đẩy. "
-        "Apply URL lấy từ **Link Apply** của project (tab Projects). "
-        "Cột Submitted = SĐT đã từng đẩy thành công (giữ khi xóa batch)."
+        "Tab này để em xuất file và nạp file Excel ứng viên."
     )
 
     batches = list_import_batches()

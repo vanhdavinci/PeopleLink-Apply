@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS projects (
     link_apply              TEXT,          -- ApplyRequest URL — user điền tay
     article_html            TEXT,          -- bài viết (HTML: đậm/nghiêng/cỡ chữ)
     article_updated_at      TEXT,
+    is_bookmarked           INTEGER NOT NULL DEFAULT 0,  -- 1 = ghim lên đầu
     raw_json                TEXT,
     synced_at               TEXT
 );
@@ -105,12 +106,6 @@ CREATE TABLE IF NOT EXISTS apply_links (
     recruiter    TEXT,
     apply_url    TEXT NOT NULL,
     synced_at    TEXT
-);
-
-CREATE TABLE IF NOT EXISTS form_templates (
-    recruiter_id INTEGER PRIMARY KEY,
-    hidden_json  TEXT NOT NULL,
-    fetched_at   TEXT NOT NULL
 );
 
 -- Import / submit jobs

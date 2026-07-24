@@ -43,8 +43,8 @@ def apply_dreamy_theme() -> None:
   --pl-blush: #fff0f5;
   --pl-ink: #5c3a4a;
   --pl-muted: #8a6574;
-  --pl-glass: rgba(255, 250, 252, 0.78);
-  --pl-glass-strong: rgba(255, 255, 255, 0.90);
+  --pl-glass: #ffffff;
+  --pl-glass-strong: #ffffff;
   --pl-border: rgba(232, 145, 176, 0.35);
   --pl-shadow: 0 10px 40px rgba(212, 106, 146, 0.12);
 }}
@@ -82,11 +82,10 @@ div[data-testid="stMetric"],
 div[data-testid="stExpander"],
 [data-testid="stDataFrame"],
 [data-testid="stDataEditor"] {{
-  background: var(--pl-glass) !important;
+  background: #ffffff !important;
   border: 1px solid var(--pl-border) !important;
   border-radius: 18px !important;
   box-shadow: var(--pl-shadow);
-  backdrop-filter: blur(12px);
 }}
 
 div[data-testid="stMetric"] {{
@@ -102,33 +101,96 @@ div[data-testid="stMetric"] [data-testid="stMetricValue"] {{
   font-family: "Playfair Display", Georgia, serif;
 }}
 
-h1, h2, h3, .pl-brand-title {{
+h1, h2, h3, h4, .pl-brand-title {{
   font-family: "Playfair Display", Georgia, serif !important;
   color: var(--pl-rose-deep) !important;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.015em;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+}}
+
+h1 {{
+  font-size: 1.85rem !important;
+}}
+
+h2 {{
+  font-size: 1.62rem !important;
+}}
+
+h3 {{
+  font-size: 1.42rem !important;
+}}
+
+h4 {{
+  font-size: 1.18rem !important;
+}}
+
+/* Streamlit markdown headings (### / ####) */
+[data-testid="stMarkdownContainer"] h1 {{
+  font-size: 1.85rem !important;
+}}
+[data-testid="stMarkdownContainer"] h2 {{
+  font-size: 1.62rem !important;
+}}
+[data-testid="stMarkdownContainer"] h3 {{
+  font-size: 1.42rem !important;
+  margin-top: 0.35rem !important;
+  margin-bottom: 0.45rem !important;
+}}
+[data-testid="stMarkdownContainer"] h4 {{
+  font-size: 1.2rem !important;
 }}
 
 .stCaption, [data-testid="stCaptionContainer"] {{
   color: var(--pl-muted) !important;
+  font-size: 0.95rem !important;
 }}
 
-button[data-baseweb="tab"] {{
+/* Tab chính (Streamlit >=1.59: React Aria, data-testid=stTab) */
+.st-key-pl_main_tabs [data-testid="stTab"],
+[data-testid="stTab"],
+[data-testid="stTabs"] [role="tab"] {{
   font-family: "Nunito", sans-serif !important;
   font-weight: 800 !important;
-  font-size: 1.12rem !important;
+  font-size: 1.26rem !important;
   letter-spacing: 0.02em !important;
   color: var(--pl-muted) !important;
-  padding: 0.65rem 1.1rem !important;
+  padding: 0.65rem 1rem !important;
 }}
 
-button[data-baseweb="tab"][aria-selected="true"] {{
+.st-key-pl_main_tabs [data-testid="stTab"] p,
+[data-testid="stTab"] p,
+[data-testid="stTab"] span,
+[data-testid="stTabs"] [role="tab"] p,
+[data-testid="stTabs"] [role="tab"] span {{
+  font-family: "Nunito", sans-serif !important;
+  font-weight: 800 !important;
+  font-size: 1.26rem !important;
+  line-height: 1.3 !important;
+  color: inherit !important;
+}}
+
+[data-testid="stTab"][aria-selected="true"],
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {{
   color: var(--pl-rose-deep) !important;
-  font-size: 1.18rem !important;
 }}
 
-[data-baseweb="tab-highlight"] {{
+[data-testid="stTab"][aria-selected="true"] p,
+[data-testid="stTab"][aria-selected="true"] span,
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] p,
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] span {{
+  color: var(--pl-rose-deep) !important;
+  font-weight: 800 !important;
+  font-size: 1.26rem !important;
+}}
+
+[data-testid="stTabs"] [role="tablist"] {{
+  gap: 0.35rem;
+}}
+
+[data-baseweb="tab-highlight"],
+[data-testid="stTabHighlight"] {{
   background-color: var(--pl-rose) !important;
-  height: 3px !important;
 }}
 
 [data-baseweb="tab-border"] {{
@@ -156,31 +218,72 @@ button[data-baseweb="tab"][aria-selected="true"] {{
   box-shadow: 0 10px 24px rgba(226, 122, 165, 0.28);
 }}
 
-.stTextInput input, .stTextArea textarea,
-.stSelectbox [data-baseweb="select"] > div {{
+/* Ô nhập — border nằm ở RootElement (Streamlit >=1.59), không phải thẻ input */
+[data-testid="stTextInputRootElement"],
+[data-testid="stTextAreaRootElement"],
+[data-testid="stNumberInputContainer"] {{
+  border: 1.5px solid rgba(212, 106, 146, 0.55) !important;
   border-radius: 14px !important;
-  border-color: var(--pl-border) !important;
-  background: var(--pl-glass-strong) !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(92, 58, 74, 0.06) !important;
 }}
 
-.stTextInput input:focus, .stTextArea textarea:focus {{
-  border-color: var(--pl-rose) !important;
-  box-shadow: 0 0 0 3px rgba(232, 145, 176, 0.25) !important;
+[data-testid="stTextInputRootElement"]:focus-within,
+[data-testid="stTextAreaRootElement"]:focus-within {{
+  border-color: var(--pl-rose-deep) !important;
+  box-shadow: 0 0 0 3px rgba(232, 145, 176, 0.28) !important;
+}}
+
+.stTextInput input, .stTextArea textarea,
+.stNumberInput input,
+[data-testid="stTextInput"] input,
+[data-testid="stTextArea"] textarea {{
+  border: none !important;
+  background: transparent !important;
+  color: var(--pl-ink) !important;
+}}
+
+.stSelectbox [data-baseweb="select"] > div,
+[data-testid="stSelectbox"] > div > div {{
+  border-radius: 14px !important;
+  border: 1.5px solid rgba(212, 106, 146, 0.55) !important;
+  background: #ffffff !important;
+}}
+
+/* Thanh search Projects — nổi rõ hơn */
+div.st-key-proj_search_q {{
+  margin-bottom: 0.85rem !important;
+}}
+div.st-key-proj_search_q [data-testid="stTextInputRootElement"] {{
+  border: 2px solid #e27aa5 !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  min-height: 2.85rem !important;
+  box-shadow: 0 4px 14px rgba(226, 122, 165, 0.16) !important;
+}}
+div.st-key-proj_search_q [data-testid="stTextInputRootElement"]:focus-within {{
+  border-color: #d46a92 !important;
+  box-shadow: 0 0 0 3px rgba(226, 122, 165, 0.3) !important;
+}}
+div.st-key-proj_search_q label,
+div.st-key-proj_search_q [data-testid="stWidgetLabel"] p {{
+  font-weight: 800 !important;
+  color: var(--pl-ink) !important;
+  font-size: 1.02rem !important;
 }}
 
 div[data-testid="stTabs"] {{
-  background: var(--pl-glass);
+  background: #ffffff;
   border: 1px solid var(--pl-border);
   border-radius: 20px;
   padding: 1rem 1.25rem 2rem;
   box-shadow: var(--pl-shadow);
-  backdrop-filter: blur(12px);
 }}
 
 div[data-testid="stAlert"] {{
   border-radius: 14px !important;
   border: 1px solid var(--pl-border) !important;
-  background: rgba(255, 250, 252, 0.9) !important;
+  background: #ffffff !important;
 }}
 
 hr {{
@@ -207,11 +310,10 @@ div[data-testid="stHorizontalBlock"]:has(.pl-header-card) {{
   min-height: 104px;
   max-height: 104px;
   padding: 0 1.2rem;
-  background: var(--pl-glass);
+  background: #ffffff;
   border: 1px solid var(--pl-border);
   border-radius: 22px;
   box-shadow: var(--pl-shadow);
-  backdrop-filter: blur(14px);
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -232,10 +334,11 @@ div[data-testid="stHorizontalBlock"]:has(.pl-header-card) {{
 .pl-brand-title {{
   margin: 0 !important;
   padding: 0 !important;
-  font-size: 1.48rem !important;
+  font-size: 1.62rem !important;
   line-height: 1.2 !important;
   font-family: "Playfair Display", Georgia, serif !important;
   color: var(--pl-rose-deep) !important;
+  font-weight: 700 !important;
 }}
 
 .pl-brand-sub {{
@@ -399,16 +502,18 @@ div.pl-avatar-dialog [data-testid="stImage"] img {{
 }}
 
 .pl-addr-title {{
-  margin: 0 0 0.35rem 0 !important;
-  font-size: 1.28rem !important;
+  margin: 0 0 0.4rem 0 !important;
+  font-size: 1.48rem !important;
+  font-weight: 700 !important;
   font-family: "Playfair Display", Georgia, serif !important;
   color: var(--pl-rose-deep) !important;
   line-height: 1.25 !important;
+  letter-spacing: 0.015em;
 }}
 
 .pl-addr-desc {{
   margin: 0;
-  font-size: 0.98rem;
+  font-size: 1.02rem;
   line-height: 1.45;
   color: var(--pl-ink);
   opacity: 0.9;

@@ -68,7 +68,8 @@ m4.metric("Projects", stats["projects"])
 m5.metric("Candidates", stats.get("candidates", 0))
 
 tab_work, tab_projects, tab_setup = st.tabs(
-    ["Ứng viên", "Projects", "Thiết lập"]
+    ["Ứng viên", "Projects", "Thiết lập"],
+    key="pl_main_tabs",
 )
 
 with tab_work:

@@ -21,6 +21,7 @@ _PROJECT_COLUMNS: dict[str, str] = {
     "link_apply": "TEXT",
     "article_html": "TEXT",
     "article_updated_at": "TEXT",
+    "is_bookmarked": "INTEGER NOT NULL DEFAULT 0",
 }
 
 _SYNC_RUN_COLUMNS: dict[str, str] = {
@@ -101,6 +102,8 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_article_images_project "
         "ON project_article_images(project_id)"
     )
+    # Unused leftover — never read/written by app code
+    conn.execute("DROP TABLE IF EXISTS form_templates")
 
 
 def init_db(db_path: Path | None = None) -> Path:

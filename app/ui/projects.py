@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import html
 import json
+import unicodedata
 
 import pandas as pd
 import streamlit as st
@@ -23,7 +24,9 @@ from app.services.project_service import (
     format_display_date,
     get_project,
     list_projects_for_user,
+    project_logo_data_uri,
     project_type_label,
+    toggle_project_bookmark,
     update_project_link_apply,
 )
 from app.services.project_sync import mark_expired_projects, sync_projects
@@ -100,13 +103,103 @@ btn.addEventListener("click", async () => {{
     )
 
 
+def _show_image_zoom_dialog(*, abs_path: str, title: str, image_id: int) -> None:
+    uri = image_data_uri(abs_path)
+    name = html.escape(title or "ảnh")
+
+    @st.dialog("Ảnh gốc", width="large")
+    def _dialog() -> None:
+        if uri:
+            # Giữ tỉ lệ gốc; chỉ giới hạn theo khung dialog
+            components.html(
+                f"""
+<!DOCTYPE html>
+<html><head><meta charset="utf-8" />
+<style>
+  body {{ margin: 0; background: transparent; text-align: center; }}
+  img {{
+    max-width: 100%;
+    max-height: 78vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(92,58,74,0.18);
+  }}
+</style></head><body>
+<img src="{uri}" alt="{name}" />
+</body></html>
+                """,
+                height=520,
+            )
+        else:
+            st.image(abs_path, caption=title or None, use_container_width=True)
+        if st.button("Đóng", use_container_width=True, key=f"zoom_close_{image_id}"):
+            st.rerun()
+
+    _dialog()
+
+
+def _render_image_gallery(project_id: int, images: list[dict]) -> None:
+    """Gallery 4 cột · mỗi ảnh có Phóng to + Xóa cạnh nhau."""
+    st.markdown(
+        """
+<style>
+div[data-testid="stHorizontalBlock"]:has(.pl-gallery-cell) {
+  row-gap: 0.75rem;
+}
+.pl-gallery-wrap img {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(92,58,74,0.12);
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+    # 4 cột; nhiều hơn 8 ảnh thì cuộn trang bình thường
+    for row_start in range(0, len(images), 4):
+        row = images[row_start : row_start + 4]
+        cols = st.columns(4)
+        for i, img in enumerate(row):
+            with cols[i]:
+                st.markdown('<div class="pl-gallery-cell pl-gallery-wrap">', unsafe_allow_html=True)
+                img_id = int(img["id"])
+                title = str(img.get("original_name") or "ảnh")
+                if img.get("exists"):
+                    st.image(img["abs_path"], use_container_width=True)
+                else:
+                    st.warning("Thiếu file")
+                z_col, d_col = st.columns(2)
+                with z_col:
+                    if st.button(
+                        "Phóng to",
+                        key=f"proj_gzoom_{project_id}_{img_id}",
+                        use_container_width=True,
+                        disabled=not img.get("exists"),
+                    ):
+                        _show_image_zoom_dialog(
+                            abs_path=str(img["abs_path"]),
+                            title=title,
+                            image_id=img_id,
+                        )
+                with d_col:
+                    if st.button(
+                        "Xóa",
+                        key=f"proj_gdel_{project_id}_{img_id}",
+                        use_container_width=True,
+                    ):
+                        delete_article_image(img_id)
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+
+
 def _render_article_section(project_id: int) -> None:
     st.markdown(
         """
 <div class="pl-proj-section">
   <h3>2. Bài viết</h3>
   <p class="pl-proj-section-desc">
-    Soạn bài (đậm / nghiêng / cỡ chữ), upload ảnh, copy bài hoặc copy từng ảnh.
+    Soạn bài (đậm / nghiêng / cỡ chữ), upload ảnh gallery, copy bài viết.
   </p>
 </div>
         """,
@@ -155,64 +248,43 @@ def _render_article_section(project_id: int) -> None:
             height=52,
         )
 
-    if body := (edited_html or article.get("article_html") or "").strip():
-        with st.expander("Xem trước bài viết", expanded=False):
-            st.markdown(
-                f'<div class="pl-article-preview">{body}</div>',
-                unsafe_allow_html=True,
-            )
-
-    st.markdown("**Ảnh đính kèm**")
+    st.markdown('<p class="pl-proj-label">Ảnh đính kèm</p>', unsafe_allow_html=True)
+    images = list_article_images(project_id)
     uploads = st.file_uploader(
         "Upload ảnh",
         type=["png", "jpg", "jpeg", "webp", "gif"],
         accept_multiple_files=True,
         key=f"proj_article_upload_{project_id}",
     )
-    if uploads and st.button(
-        f"Lưu {len(uploads)} ảnh lên",
-        key=f"proj_article_upload_save_{project_id}",
-    ):
-        for f in uploads:
-            add_article_image(
-                project_id,
-                file_bytes=f.getvalue(),
-                original_name=f.name or "image.jpg",
-            )
-        st.success(f"Đã upload {len(uploads)} ảnh.")
-        st.rerun()
+    if uploads:
+        if st.button(
+            f"Lưu {len(uploads)} ảnh lên",
+            key=f"proj_article_upload_save_{project_id}",
+            use_container_width=True,
+            type="primary",
+        ):
+            for f in uploads:
+                add_article_image(
+                    project_id,
+                    file_bytes=f.getvalue(),
+                    original_name=f.name or "image.jpg",
+                )
+            st.success(f"Đã upload {len(uploads)} ảnh.")
+            st.rerun()
+    else:
+        st.button(
+            "Lưu ảnh lên",
+            key=f"proj_article_upload_save_disabled_{project_id}",
+            use_container_width=True,
+            disabled=True,
+        )
 
-    images = list_article_images(project_id)
     if not images:
         st.caption("Chưa có ảnh — upload ở phía trên.")
         return
 
-    for img in images:
-        cols = st.columns([2.2, 1, 1])
-        with cols[0]:
-            if img.get("exists"):
-                st.image(img["abs_path"], use_container_width=True, caption=img.get("original_name"))
-            else:
-                st.warning(f"Thiếu file: {img.get('rel_path')}")
-        with cols[1]:
-            uri = image_data_uri(img["abs_path"]) if img.get("exists") else None
-            if uri:
-                _clipboard_copy_button(
-                    label="Copy ảnh",
-                    image_data_uri_value=uri,
-                    key=f"img_{img['id']}",
-                    height=52,
-                )
-            else:
-                st.caption("Không copy được")
-        with cols[2]:
-            if st.button(
-                "Xóa ảnh",
-                key=f"proj_del_img_{img['id']}",
-                use_container_width=True,
-            ):
-                delete_article_image(int(img["id"]))
-                st.rerun()
+    st.caption("Gallery 4 cột · Phóng to / Xóa ngay trên từng ảnh.")
+    _render_image_gallery(project_id, images)
 
 
 def _ensure_proj_state() -> None:
@@ -237,12 +309,17 @@ def _inject_styles() -> None:
         """
 <style>
 .pl-proj-card {
-  background: rgba(255,250,252,0.92);
+  background: #ffffff;
   border: 1px solid rgba(232,145,176,0.35);
   border-radius: 18px;
   box-shadow: 0 10px 28px rgba(212,106,146,0.12);
   padding: 1rem 1.1rem 0.85rem;
   margin-bottom: 0.35rem;
+  height: 286px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .pl-proj-card-top {
   display: flex;
@@ -250,18 +327,59 @@ def _inject_styles() -> None:
   gap: 0.75rem;
   align-items: flex-start;
   margin-bottom: 0.85rem;
+  min-height: 4.2rem;
+}
+.pl-proj-card-head {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  min-width: 0;
+  flex: 1;
+}
+.pl-proj-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(212, 106, 146, 0.22);
+  background: #fff5f8;
+}
+.pl-proj-avatar-fallback {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: #fff;
+  background: linear-gradient(135deg, #f0a0be, #e27aa5);
+  border: 2px solid #ffffff;
+  box-shadow: 0 4px 12px rgba(212, 106, 146, 0.22);
 }
 .pl-proj-title {
   font-family: "Playfair Display", Georgia, serif;
   color: #5c3a4a;
-  font-size: 1.05rem;
+  font-size: 1.18rem;
   font-weight: 700;
   line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.6em;
 }
 .pl-proj-code {
   color: #8a6574;
   font-size: 0.85rem;
   margin-top: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pl-proj-badge {
   background: #f0a0be;
@@ -273,6 +391,7 @@ def _inject_styles() -> None:
   padding: 0.28rem 0.55rem;
   border-radius: 0 12px 0 12px;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 .pl-proj-badge--expired { background: #9a7a86; }
 .pl-proj-stats {
@@ -280,6 +399,7 @@ def _inject_styles() -> None:
   grid-template-columns: 1fr 1fr 1.2fr;
   gap: 0.65rem;
   margin-bottom: 0.75rem;
+  flex-shrink: 0;
 }
 .pl-proj-stat-label {
   font-size: 0.75rem;
@@ -311,26 +431,61 @@ def _inject_styles() -> None:
   font-size: 0.86rem;
   color: #5c3a4a;
   margin-top: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.pl-proj-link { color: #8a6574; }
+.pl-proj-link {
+  color: #8a6574;
+  margin-top: auto;
+  padding-top: 0.35rem;
+}
+.pl-proj-page-title {
+  margin: 0 0 0.2rem 0 !important;
+  font-family: "Playfair Display", Georgia, serif !important;
+  font-size: 1.75rem !important;
+  font-weight: 700 !important;
+  color: #5c3a4a !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0.01em;
+}
 .pl-proj-section {
-  background: rgba(255,250,252,0.88);
+  background: #ffffff;
   border: 1px solid rgba(232,145,176,0.32);
   border-radius: 18px;
-  padding: 1.1rem 1.2rem 1rem;
-  margin-bottom: 1rem;
+  padding: 1.15rem 1.25rem 1.05rem;
+  margin-bottom: 1.15rem;
   box-shadow: 0 8px 22px rgba(212,106,146,0.08);
 }
 .pl-proj-section h3 {
-  margin: 0 0 0.35rem 0 !important;
+  margin: 0 0 0.45rem 0 !important;
   font-family: "Playfair Display", Georgia, serif !important;
-  color: #d46a92 !important;
-  font-size: 1.25rem !important;
+  color: #5c3a4a !important;
+  font-size: 1.55rem !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: 0.015em;
+  padding-bottom: 0.45rem;
+  border-bottom: 2px solid rgba(226, 122, 165, 0.4);
 }
 .pl-proj-section-desc {
-  color: #8a6574;
-  font-size: 0.9rem;
+  color: #6e4a58;
+  font-size: 1rem;
+  line-height: 1.45;
   margin: 0 0 0.85rem 0;
+}
+.pl-proj-label {
+  font-family: "Nunito", sans-serif !important;
+  font-size: 1.12rem !important;
+  font-weight: 800 !important;
+  color: #5c3a4a !important;
+  margin: 0.85rem 0 0.35rem 0 !important;
+}
+.pl-proj-bookmark {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: #e2a12b;
+  font-size: 0.95rem;
 }
 </style>
         """,
@@ -343,6 +498,7 @@ def _render_project_card(project: dict) -> None:
     name = project.get("project_name") or f"Project {pid}"
     code = project.get("project_code") or "—"
     expired = int(project.get("is_expired") or 0)
+    bookmarked = bool(int(project.get("is_bookmarked") or 0))
     pct = int(project.get("total_percent_target") or 0)
     type_label = project_type_label(project.get("project_type"))
     start_s = format_display_date(
@@ -354,14 +510,25 @@ def _render_project_card(project: dict) -> None:
     badge = "Hết hạn" if expired else type_label
     members_html = _esc(APP_USER_FULL_NAME)
     pct_clamped = max(0, min(100, pct))
+    star = '<span class="pl-proj-bookmark" title="Đã bookmark">★</span>' if bookmarked else ""
+    logo_uri = project_logo_data_uri(name, str(code))
+    if logo_uri:
+        avatar_html = (
+            f'<img class="pl-proj-avatar" src="{logo_uri}" alt="logo" />'
+        )
+    else:
+        avatar_html = '<div class="pl-proj-avatar-fallback">PL</div>'
 
     st.markdown(
         f"""
-<div class="pl-proj-card">
+<div class="pl-proj-card {'pl-proj-card--bookmarked' if bookmarked else ''}">
   <div class="pl-proj-card-top">
-    <div>
-      <div class="pl-proj-title">{_esc(name)}</div>
-      <div class="pl-proj-code">Mã dự án: {_esc(code)} · ID {pid}</div>
+    <div class="pl-proj-card-head">
+      {avatar_html}
+      <div style="min-width:0">
+        <div class="pl-proj-title">{_esc(name)}{star}</div>
+        <div class="pl-proj-code">Mã dự án: {_esc(code)} · ID {pid}</div>
+      </div>
     </div>
     <span class="pl-proj-badge {'pl-proj-badge--expired' if expired else ''}">{_esc(badge)}</span>
   </div>
@@ -386,9 +553,16 @@ def _render_project_card(project: dict) -> None:
         """,
         unsafe_allow_html=True,
     )
-    if st.button("Xem chi tiết", key=f"proj_detail_{pid}", use_container_width=True):
-        _open_project_detail(pid)
-        st.rerun()
+    b_bm, b_detail = st.columns([1, 1.4])
+    with b_bm:
+        bm_label = "★ Bỏ bookmark" if bookmarked else "☆ Bookmark"
+        if st.button(bm_label, key=f"proj_bm_{pid}", use_container_width=True):
+            toggle_project_bookmark(pid)
+            st.rerun()
+    with b_detail:
+        if st.button("Xem chi tiết", key=f"proj_detail_{pid}", use_container_width=True):
+            _open_project_detail(pid)
+            st.rerun()
 
 
 def _render_project_detail_page(project_id: int) -> None:
@@ -409,7 +583,10 @@ def _render_project_detail_page(project_id: int) -> None:
 
     top_l, top_r = st.columns([3, 1])
     with top_l:
-        st.markdown(f"### {name}")
+        st.markdown(
+            f'<h2 class="pl-proj-page-title">{_esc(name)}</h2>',
+            unsafe_allow_html=True,
+        )
         st.caption(
             f"Mã: `{code}` · ID: `{project_id}` · "
             f"{'Hết hạn' if expired else 'Đang chạy'} · "
@@ -449,7 +626,7 @@ def _render_project_detail_page(project_id: int) -> None:
     )
     st.caption(f"Synced: `{project.get('synced_at') or '—'}`")
 
-    st.markdown("**Link Apply**")
+    st.markdown('<p class="pl-proj-label">Link Apply</p>', unsafe_allow_html=True)
     st.caption(
         "Dạng: `…/ProjectHeadcount/ApplyRequest/xxxx` — "
         "bắt buộc có trước khi đẩy ứng viên cho project này."
@@ -471,14 +648,6 @@ def _render_project_detail_page(project_id: int) -> None:
             st.rerun()
         except Exception as exc:  # noqa: BLE001
             st.error(str(exc))
-
-    raw = project.get("raw_json") or ""
-    if raw:
-        with st.expander("Raw JSON (portal)"):
-            try:
-                st.json(json.loads(raw))
-            except json.JSONDecodeError:
-                st.code(raw[:4000])
 
     st.divider()
 
@@ -641,17 +810,60 @@ def _render_project_list() -> None:
         st.rerun()
 
     projects = list_projects_for_user(include_expired=True)
-    st.write(f"Projects gắn user: **{len(projects)}**")
     if not projects:
         st.info("Chưa có project — Sync Projects với cookie portal trước.")
         return
 
-    show_expired = st.checkbox("Hiện project hết hạn", value=True, key="proj_show_exp")
+    search_q = st.text_input(
+        "Tìm project",
+        placeholder="Tên, mã project, ID…",
+        key="proj_search_q",
+        icon=":material/search:",
+    ).strip()
+
+    f1, f2 = st.columns([2, 1.2])
+    with f1:
+        st.caption(f"Projects gắn user: **{len(projects)}**")
+    with f2:
+        show_expired = st.checkbox(
+            "Hiện project hết hạn", value=True, key="proj_show_exp"
+        )
+
     visible = (
         projects
         if show_expired
         else [p for p in projects if not int(p.get("is_expired") or 0)]
     )
+    if search_q:
+
+        def _fold(s: str) -> str:
+            raw = unicodedata.normalize("NFD", s)
+            return "".join(c for c in raw if unicodedata.category(c) != "Mn").casefold()
+
+        needle = _fold(search_q)
+        filtered: list[dict] = []
+        for p in visible:
+            hay = _fold(
+                " ".join(
+                    [
+                        str(p.get("project_name") or ""),
+                        str(p.get("project_code") or ""),
+                        str(p.get("project_id") or ""),
+                        project_type_label(p.get("project_type")),
+                        str(p.get("link_apply") or ""),
+                    ]
+                )
+            )
+            if needle in hay:
+                filtered.append(p)
+        visible = filtered
+
+    if search_q or not show_expired:
+        st.caption(f"Đang hiện: **{len(visible)}** project")
+
+    if not visible:
+        st.info("Không có project khớp bộ lọc / tìm kiếm.")
+        return
 
     for i in range(0, len(visible), 2):
         cols = st.columns(2)

@@ -102,6 +102,16 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_article_images_project "
         "ON project_article_images(project_id)"
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS auth_users (
+            username      TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            created_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        )
+        """
+    )
     # Unused leftover — never read/written by app code
     conn.execute("DROP TABLE IF EXISTS form_templates")
 
@@ -114,11 +124,13 @@ def init_db(db_path: Path | None = None) -> Path:
         migrate_schema(conn)
         conn.commit()
 
-    # Seed singleton app user + link existing members (after tables exist)
+    # Seed singleton app user + login accounts + link members
+    from app.services.auth import seed_auth_users
     from app.services.user_service import ensure_app_user, link_members_to_app_user
 
     ensure_app_user()
     link_members_to_app_user()
+    seed_auth_users()
     return path
 
 
@@ -162,6 +174,7 @@ def db_stats() -> dict[str, int]:
         "projects",
         "project_members",
         "users",
+        "auth_users",
         "apply_links",
         "candidates",
         "submitted_candidates",

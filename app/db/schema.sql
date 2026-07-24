@@ -85,6 +85,14 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at           TEXT
 );
 
+-- Login accounts (username / password hash)
+CREATE TABLE IF NOT EXISTS auth_users (
+    username     TEXT PRIMARY KEY,
+    password_hash TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS project_members (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id  INTEGER NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,

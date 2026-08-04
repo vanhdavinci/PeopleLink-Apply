@@ -234,10 +234,28 @@ h4 {{
   box-shadow: 0 0 0 3px rgba(232, 145, 176, 0.28) !important;
 }}
 
+/* Date input: chỉ viền ô nhập trong, không bọc khung ngoài */
+[data-testid="stDateInput"] {{
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}}
+[data-testid="stDateInput"] [data-baseweb="input"] {{
+  border: 1.5px solid rgba(212, 106, 146, 0.55) !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(92, 58, 74, 0.06) !important;
+}}
+[data-testid="stDateInput"]:focus-within [data-baseweb="input"] {{
+  border-color: var(--pl-rose-deep) !important;
+  box-shadow: 0 0 0 3px rgba(232, 145, 176, 0.28) !important;
+}}
+
 .stTextInput input, .stTextArea textarea,
 .stNumberInput input,
 [data-testid="stTextInput"] input,
-[data-testid="stTextArea"] textarea {{
+[data-testid="stTextArea"] textarea,
+[data-testid="stDateInput"] input {{
   border: none !important;
   background: transparent !important;
   color: var(--pl-ink) !important;

@@ -25,6 +25,7 @@ from app.services.auth import (
     session_expires_in_seconds,
 )
 from app.ui.candidates import render_candidates_workspace
+from app.ui.master_file import render_master_file_workspace
 from app.ui.projects import render_projects_workspace
 from app.ui.theme import bootstrap_theme, render_app_header, render_setup_user_card
 from app.ui.welcome import render_login_gate
@@ -68,8 +69,8 @@ m3.metric("Wards", stats["wards"])
 m4.metric("Projects", stats["projects"])
 m5.metric("Candidates", stats.get("candidates", 0))
 
-tab_work, tab_projects, tab_setup = st.tabs(
-    ["Ứng viên", "Projects", "Thiết lập"],
+tab_work, tab_projects, tab_master, tab_setup = st.tabs(
+    ["Ứng viên", "Projects", "Master File", "Thiết lập"],
     key="pl_main_tabs",
 )
 
@@ -78,6 +79,9 @@ with tab_work:
 
 with tab_projects:
     render_projects_workspace()
+
+with tab_master:
+    render_master_file_workspace()
 
 with tab_setup:
     render_setup_user_card(app_user)

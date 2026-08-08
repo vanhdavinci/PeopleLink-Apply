@@ -15,9 +15,12 @@ from openpyxl.worksheet.worksheet import Worksheet
 from app.config import TEMPLATES_DIR
 
 TEMPLATE_PATH = TEMPLATES_DIR / "master_file_llv_mtf.xlsx"
+TRAINING_TEMPLATE_PATH = TEMPLATES_DIR / "master_file_list_training.xlsx"
 
 SHEET_DANH_SACH = "DANH SÁCH"
 SHEET_LICH = "LỊCH LÀM VIỆC"
+SHEET_TRAINING_LIST = "Training List"
+SHEET_DETAIL = "Detail"
 
 _THIN_BORDER = Border(
     left=Side(style="thin", color="000000"),
@@ -79,6 +82,16 @@ LICH_COLUMNS: list[str] = [
     "SUP/ PG ĐĂNG KÝ",
     "SĐT",
     "STATUS",
+]
+
+# Cột map sang sheet Training List (header row 3 trong template)
+TRAINING_LIST_COLUMNS: list[str] = [
+    "STT",
+    "Họ tên",
+    "SDT",
+    "Vị trí",
+    "Khu vực",
+    "Siêu thị/ Địa điểm",
 ]
 
 
@@ -296,18 +309,259 @@ def apply_lich_bulk_fields(
 
 
 def refresh_master_export(result: dict[str, Any]) -> dict[str, Any]:
-    """Cập nhật lại xlsx_bytes từ danh_sach + lich hiện tại."""
+    """Cập nhật lại xlsx_bytes (+ training) từ danh_sach + lich hiện tại."""
     danh_sach = list(result.get("danh_sach") or [])
     lich = list(result.get("lich") or [])
     payload = export_master_file_bytes(danh_sach, lich_rows=lich)
+    training_rows = build_training_list_rows(danh_sach, lich)
+    training_bytes = export_training_list_bytes(
+        danh_sach_rows=danh_sach,
+        lich_rows=lich,
+    )
     return {
         **result,
         "danh_sach": danh_sach,
         "lich": lich,
+        "training_list": training_rows,
         "row_count": len(danh_sach),
         "lich_count": len(lich),
         "xlsx_bytes": payload,
+        "training_xlsx_bytes": training_bytes,
     }
+
+
+def _short_position(raw: str) -> str:
+    """Vị trí - Trình độ → SUP / PG (theo mẫu Training List)."""
+    text = _cell_str(raw)
+    if not text:
+        return ""
+    upper = text.upper()
+    if re.search(r"\bSUP\b", upper) or upper.startswith("SUP"):
+        return "SUP"
+    if re.search(r"\bPG\b", upper) or upper.startswith("PG"):
+        return "PG"
+    if " - " in text:
+        return text.split(" - ", 1)[0].strip()
+    return text
+
+
+def build_training_list_rows(
+    danh_sach_rows: list[dict[str, Any]],
+    lich_rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Map DANH SÁCH + LỊCH → dòng Training List."""
+    lich = lich_rows if lich_rows is not None else build_lich_lam_viec(danh_sach_rows)
+    out: list[dict[str, Any]] = []
+    for i, ds in enumerate(danh_sach_rows):
+        ll = lich[i] if i < len(lich) else {}
+        out.append(
+            {
+                "STT": i + 1,
+                "Họ tên": _cell_str(ds.get("Họ tên"))
+                or _cell_str(ll.get("SUP/ PG ĐĂNG KÝ")),
+                "SDT": _cell_str(ds.get("Di động")) or _cell_str(ll.get("SĐT")),
+                "Vị trí": _short_position(str(ds.get("Vị trí - Trình độ") or "")),
+                "Khu vực": _cell_str(ll.get("Address")),
+                "Siêu thị/ Địa điểm": _cell_str(ll.get("Detail"))
+                or _cell_str(ds.get("Khu vực / Siêu thị đăng ký làm việc")),
+            }
+        )
+    return out
+
+
+
+# Training List: cột dữ liệu map (A-F). Toàn bảng style tới cột P (16) = Đánh Giá.
+_TRAINING_HEADER_ROW = 3
+_TRAINING_DATA_START = 4
+_TRAINING_LAST_COL = 16  # Đánh Giá
+_TRAINING_DATA_ROW_HEIGHT = 37.05
+_TRAINING_COL_MAP = {
+    1: "STT",
+    2: "Họ tên",
+    3: "SDT",
+    4: "Vị trí",
+    5: "Khu vực",
+    6: "Siêu thị/ Địa điểm",
+}
+
+
+def _snapshot_row_styles(ws: Worksheet, row: int, max_col: int) -> list[dict[str, Any]]:
+    """Lưu style 1 dòng mẫu để copy sang dòng mới."""
+    from copy import copy
+
+    styles: list[dict[str, Any]] = []
+    for c in range(1, max_col + 1):
+        cell = ws.cell(row, c)
+        styles.append(
+            {
+                "font": copy(cell.font)
+                if cell.has_style
+                else Font(name="Times New Roman", size=11),
+                "border": copy(cell.border) if cell.has_style else _THIN_BORDER,
+                "fill": copy(cell.fill)
+                if cell.has_style
+                else PatternFill(fill_type=None),
+                "alignment": copy(cell.alignment)
+                if cell.has_style
+                else Alignment(horizontal="center", vertical="center"),
+                "number_format": cell.number_format,
+            }
+        )
+    return styles
+
+
+def _apply_style_dict(cell: Any, style: dict[str, Any]) -> None:
+    cell.font = style["font"]
+    cell.border = style["border"]
+    cell.fill = style["fill"]
+    cell.alignment = style["alignment"]
+    cell.number_format = style["number_format"]
+
+
+def _fill_training_list_sheet(
+    ws: Worksheet,
+    training_rows: list[dict[str, Any]],
+    *,
+    title: str | None = None,
+) -> None:
+    """
+    Ghi data vào Training List, giữ nguyên format template
+    (font/size/width/header màu xanh / merge / border all).
+    """
+    header_row = _TRAINING_HEADER_ROW
+    last_col = _TRAINING_LAST_COL
+
+    if title:
+        title_cell = ws.cell(1, 1)
+        title_cell.value = title
+        title_cell.font = Font(name="Times New Roman", size=12, bold=True)
+        title_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    sample_row = _TRAINING_DATA_START
+    if (ws.max_row or 0) < sample_row:
+        sample_row = header_row
+    styles = _snapshot_row_styles(ws, sample_row, last_col)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for c in range(last_col):
+        styles[c]["border"] = _THIN_BORDER
+        styles[c]["font"] = Font(name="Times New Roman", size=11)
+        styles[c]["alignment"] = center
+        styles[c]["fill"] = PatternFill(fill_type="solid", fgColor="FFFFFF")
+
+    # Xóa data cũ, không đụng header / column width / merge header
+    if ws.max_row and ws.max_row > header_row:
+        ws.delete_rows(header_row + 1, ws.max_row - header_row)
+
+    # Header: chỉ bổ sung Border All, giữ nguyên màu nền/chữ của template
+    for c in range(1, last_col + 1):
+        ws.cell(header_row, c).border = _THIN_BORDER
+    if ws.row_dimensions[header_row].height is None:
+        ws.row_dimensions[header_row].height = 45.0
+
+    for i, row in enumerate(training_rows):
+        r = _TRAINING_DATA_START + i
+        ws.row_dimensions[r].height = _TRAINING_DATA_ROW_HEIGHT
+        for c in range(1, last_col + 1):
+            cell = ws.cell(r, c)
+            key = _TRAINING_COL_MAP.get(c)
+            cell.value = row.get(key, "") if key else None
+            _apply_style_dict(cell, styles[c - 1])
+            if c in (2, 6) and key:
+                cell.alignment = Alignment(
+                    horizontal="left", vertical="center", wrap_text=True
+                )
+
+    last_data_row = header_row + len(training_rows)
+    try:
+        ws.auto_filter.ref = f"A{header_row}:P{max(last_data_row, header_row)}"
+    except Exception:
+        pass
+
+
+def export_training_list_bytes(
+    *,
+    danh_sach_rows: list[dict[str, Any]],
+    lich_rows: list[dict[str, Any]] | None = None,
+    template_path: Path | None = None,
+    title: str | None = None,
+) -> bytes:
+    """
+    Xuất file List training:
+    - Sheet Detail: giữ nguyên
+    - Sheet Training List: map dữ liệu (giữ format mẫu)
+    - Các sheet khác: bỏ (chỉ còn 2 sheet)
+    """
+    training_rows = build_training_list_rows(danh_sach_rows, lich_rows)
+    path = template_path or TRAINING_TEMPLATE_PATH
+
+    if path.is_file():
+        wb = load_workbook(path)
+        detail_name = _resolve_sheet_name(wb, SHEET_DETAIL)
+        train_name = _resolve_sheet_name(wb, SHEET_TRAINING_LIST)
+        keep: set[str] = set()
+        if detail_name in wb.sheetnames:
+            keep.add(detail_name)
+        else:
+            wb.create_sheet(SHEET_DETAIL)
+            detail_name = SHEET_DETAIL
+            keep.add(detail_name)
+        if train_name in wb.sheetnames:
+            keep.add(train_name)
+        else:
+            wb.create_sheet(SHEET_TRAINING_LIST, 0)
+            train_name = SHEET_TRAINING_LIST
+            keep.add(train_name)
+        for name in list(wb.sheetnames):
+            if name not in keep:
+                del wb[name]
+
+        _fill_training_list_sheet(wb[train_name], training_rows, title=title)
+        try:
+            idx = wb.sheetnames.index(train_name)
+            if idx > 0:
+                wb.move_sheet(train_name, offset=-idx)
+        except Exception:
+            pass
+    else:
+        wb = Workbook()
+        ws_tl = wb.active
+        ws_tl.title = SHEET_TRAINING_LIST
+        headers = [
+            "STT",
+            "Họ tên",
+            "SDT",
+            "Vị trí",
+            "Khu vực",
+            "Siêu thị/ Địa điểm",
+            "Điểm Danh",
+            None,
+            "Đúng Giờ\n(1đ)",
+            "Thái Độ Học (1đ)",
+            "Phát Biểu (1đ)",
+            "Tham Dự Đủ\n(1đ)",
+            "Ngoại Hình\n(1đ)",
+            "Bài Test (5đ)",
+            "Tổng Điểm (10đ)",
+            "Đánh Giá",
+        ]
+        for c, name in enumerate(headers, start=1):
+            cell = ws_tl.cell(3, c)
+            cell.value = name
+            cell.fill = PatternFill(fill_type="solid", fgColor="375623")
+            cell.font = Font(
+                name="Times New Roman", size=11, bold=True, color="FFFFFF"
+            )
+            cell.alignment = Alignment(
+                horizontal="center", vertical="center", wrap_text=True
+            )
+            cell.border = _THIN_BORDER
+        _fill_training_list_sheet(ws_tl, training_rows, title=title)
+        wb.create_sheet(SHEET_DETAIL)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    wb.close()
+    return buf.getvalue()
 
 
 def _clear_data_rows(ws: Worksheet, *, header_row: int = 1) -> None:
@@ -378,18 +632,23 @@ def _apply_times_new_roman(
     header_row: int,
     n_cols: int,
     n_data_rows: int,
+    header_font_color: str | None = "FFFFFF",
 ) -> None:
     """Toàn bộ chữ trong bảng = Times New Roman."""
     last_row = header_row + max(0, n_data_rows)
     for c in range(1, n_cols + 1):
         header_cell = ws.cell(header_row, c)
         size = header_cell.font.size if header_cell.font and header_cell.font.size else 11
-        header_cell.font = Font(
-            name="Times New Roman",
-            bold=True,
-            size=size,
-            color="FFFFFF",
-        )
+        bold = True if header_cell.font is None else bool(header_cell.font.bold)
+        if header_font_color:
+            header_cell.font = Font(
+                name="Times New Roman",
+                bold=True,
+                size=size,
+                color=header_font_color,
+            )
+        else:
+            header_cell.font = Font(name="Times New Roman", bold=bold or True, size=size)
     for r in range(header_row + 1, last_row + 1):
         for c in range(1, n_cols + 1):
             cell = ws.cell(r, c)
@@ -404,6 +663,8 @@ def _write_rows(
     *,
     header_row: int = 1,
     center_columns: tuple[str, ...] = (),
+    header_font_color: str | None = "FFFFFF",
+    force_white_data_fill: bool = True,
 ) -> None:
     white = PatternFill(fill_type="solid", fgColor="FFFFFF")
     center = Alignment(horizontal="center", vertical="center")
@@ -422,7 +683,8 @@ def _write_rows(
         for c, name in enumerate(columns, start=1):
             cell = ws.cell(r, c)
             cell.value = row.get(name, "")
-            cell.fill = white
+            if force_white_data_fill:
+                cell.fill = white
             if c in center_idx:
                 cell.alignment = center
     # Xóa dòng thừa (tránh ô trống còn style vàng)
@@ -441,6 +703,7 @@ def _write_rows(
         header_row=header_row,
         n_cols=len(columns),
         n_data_rows=len(rows),
+        header_font_color=header_font_color,
     )
 
 
@@ -504,14 +767,21 @@ def export_master_file_bytes(
 
 
 def process_master_upload(file_bytes: bytes) -> dict[str, Any]:
-    """Parse upload → map → build export bytes."""
+    """Parse upload → map → build export bytes (LLV&MTF + List training)."""
     rows = parse_source_workbook(file_bytes)
     lich = build_lich_lam_viec(rows)
     payload = export_master_file_bytes(rows, lich_rows=lich)
+    training_rows = build_training_list_rows(rows, lich)
+    training_bytes = export_training_list_bytes(
+        danh_sach_rows=rows,
+        lich_rows=lich,
+    )
     return {
         "row_count": len(rows),
         "lich_count": len(lich),
         "danh_sach": rows,
         "lich": lich,
+        "training_list": training_rows,
         "xlsx_bytes": payload,
+        "training_xlsx_bytes": training_bytes,
     }

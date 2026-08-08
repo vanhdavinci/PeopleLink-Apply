@@ -11,7 +11,10 @@ from app.services.locations import list_provinces
 from app.services.master_file import (
     DANH_SACH_COLUMNS,
     LICH_COLUMNS,
+    TRAINING_LIST_COLUMNS,
     apply_lich_bulk_fields,
+    build_training_list_rows,
+    export_training_list_bytes,
     format_schedule_days,
     format_schedule_times,
     make_time_slot,
@@ -34,6 +37,12 @@ def _build_export_filename(*, export_date: date, project_name: str) -> str:
     date_part = export_date.strftime("%d%m%Y")
     project = _sanitize_project_name(project_name) or "DU AN"
     return f"{date_part} - {project}.xlsx"
+
+
+def _build_training_filename(*, export_date: date, project_name: str) -> str:
+    date_part = export_date.strftime("%d%m%Y")
+    project = _sanitize_project_name(project_name) or "DU AN"
+    return f"{date_part} {project} - List training.xlsx"
 
 
 def _province_labels() -> list[str]:
@@ -249,7 +258,12 @@ def render_master_file_workspace() -> None:
         export_date=export_date if isinstance(export_date, date) else date.today(),
         project_name=project_name,
     )
-    st.caption(f"Tên file xuất: `{out_name}`")
+    training_name = _build_training_filename(
+        export_date=export_date if isinstance(export_date, date) else date.today(),
+        project_name=project_name,
+    )
+    st.caption(f"Tên file LLV&MTF: `{out_name}`")
+    st.caption(f"Tên file List training: `{training_name}`")
 
     uploaded = st.file_uploader(
         "Chọn file .xlsx hồ sơ nguồn",
@@ -312,19 +326,43 @@ def render_master_file_workspace() -> None:
     if not can_download:
         st.warning("Nhập **Tên dự án** trước khi tải file.")
 
-    st.download_button(
-        "Tải Excel (DANH SÁCH + LỊCH LÀM VIỆC)",
-        data=result["xlsx_bytes"],
-        file_name=out_name,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        type="primary",
-        use_container_width=True,
-        disabled=not can_download,
-        key="master_file_download",
+    training_title = (
+        f"KẾT QUẢ TRAINING: {_sanitize_project_name(project_name)} "
+        f"({(export_date if isinstance(export_date, date) else date.today()).strftime('%d/%m/%Y')})"
     )
-    st.caption(f"Nguồn: `{src_name}` · Xuất: `{out_name}`")
+    training_bytes = export_training_list_bytes(
+        danh_sach_rows=list(result.get("danh_sach") or []),
+        lich_rows=list(result.get("lich") or []),
+        title=training_title,
+    )
 
-    tab_ds, tab_ll = st.tabs(["Preview DANH SÁCH", "Preview LỊCH LÀM VIỆC"])
+    d1, d2 = st.columns(2)
+    with d1:
+        st.download_button(
+            "Tải LLV&MTF (DANH SÁCH + LỊCH LÀM VIỆC)",
+            data=result["xlsx_bytes"],
+            file_name=out_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True,
+            disabled=not can_download,
+            key="master_file_download",
+        )
+    with d2:
+        st.download_button(
+            "Tải List training (Training List + Detail)",
+            data=training_bytes,
+            file_name=training_name,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+            disabled=not can_download,
+            key="master_file_download_training",
+        )
+    st.caption(f"Nguồn: `{src_name}`")
+
+    tab_ds, tab_ll, tab_tr = st.tabs(
+        ["Preview DANH SÁCH", "Preview LỊCH LÀM VIỆC", "Preview Training List"]
+    )
     with tab_ds:
         df_ds = pd.DataFrame(result["danh_sach"], columns=DANH_SACH_COLUMNS)
         st.dataframe(df_ds, use_container_width=True, hide_index=True)
@@ -333,3 +371,11 @@ def render_master_file_workspace() -> None:
         st.dataframe(df_ll, use_container_width=True, hide_index=True)
         st.divider()
         _render_lich_bulk_panel(result)
+    with tab_tr:
+        training_preview = build_training_list_rows(
+            list(result.get("danh_sach") or []),
+            list(result.get("lich") or []),
+        )
+        df_tr = pd.DataFrame(training_preview, columns=TRAINING_LIST_COLUMNS)
+        st.dataframe(df_tr, use_container_width=True, hide_index=True)
+        st.caption("Sheet Detail giữ nguyên theo template. File xuất chỉ còn 2 sheet.")
